@@ -1,0 +1,1303 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>slovaks.ai — testing1</title>
+
+<script>
+  window.addEventListener("error", function (e) {
+    var r = document.getElementById("root");
+    if (r && !r.dataset.mounted) r.innerHTML =
+      '<div style="padding:40px;font-family:sans-serif;color:#b00;max-width:800px;margin:0 auto">'
+      + '<h2>Nepodarilo sa načítať prototyp</h2><p><b>' + (e.message || e.error) + '</b></p>'
+      + '<p style="color:#555">Súbor pri prvom otvorení sťahuje knižnice z CDN — skontroluj internet a načítaj znova.</p></div>';
+  });
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js"></script>
+
+<script>
+  tailwind.config = { theme: { extend: {
+    colors: { brand:'#2196F3', brandDark:'#1877cf', brandSoft:'#A4D3F8', navy:'#131a2e', ink:'#0f172a' },
+    fontFamily: { sans:['Inter','ui-sans-serif','system-ui','Segoe UI','Arial','sans-serif'], logo:['Poppins','Inter','sans-serif'] },
+  }}};
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Poppins:wght@500;600;700&display=swap" rel="stylesheet" />
+
+<style>
+  html, body, #root { height: 100%; }
+  body { margin:0; font-family:'Inter',system-ui,sans-serif; color:#0f172a; background:#fff; }
+  .map-country { fill:#e8edf2; stroke:#fff; stroke-width:0.5px; vector-effect:non-scaling-stroke; }
+  .no-scrollbar::-webkit-scrollbar { display:none; }
+  .no-scrollbar { -ms-overflow-style:none; scrollbar-width:none; }
+  .nice-scroll::-webkit-scrollbar { width:8px; height:8px; }
+  .nice-scroll::-webkit-scrollbar-thumb { background:#cbd5e1; border-radius:8px; }
+  .nice-scroll::-webkit-scrollbar-thumb:hover { background:#94a3b8; }
+  .nice-scroll::-webkit-scrollbar-track { background:transparent; }
+  .nice-scroll { scrollbar-width:thin; scrollbar-color:#cbd5e1 transparent; }
+  .lock-scroll { overscroll-behavior:contain; }
+  @keyframes pulseRing { 0%{transform:scale(1);opacity:.7;} 70%{transform:scale(1.9);opacity:0;} 100%{opacity:0;} }
+  .pulse-ring { animation:pulseRing 1.6s ease-out infinite; transform-origin:center; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(6px);} to{opacity:1;transform:translateY(0);} }
+  .fade-in { animation:fadeIn .18s ease-out; }
+  @keyframes slideInR { from{transform:translateX(100%);} to{transform:translateX(0);} }
+  .slide-in-r { animation:slideInR .22s ease-out; }
+  @keyframes blink { 0%,80%,100%{opacity:.25;} 40%{opacity:1;} }
+  .dot { animation:blink 1.2s infinite; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/x-app-src" id="app-src">
+const { useState, useEffect, useRef, useMemo } = React;
+
+/* ============================================================ DATA ============================================================ */
+const CATEGORIES = [
+  "Machine Learning","Computer Vision","Natural Language Processing","Data Analysis & Processing",
+  "Planning & Reasoning","Prediction & Optimization","Trustworthy AI","Artificial General Intelligence",
+  "AI Applications","Environment","Infrastructure","Robotics","Business","Cognitive Science","Complex Systems"
+];
+const EUROPE=["Czechia","Slovakia","Austria","Germany","Switzerland","United Kingdom","Netherlands","France","Portugal","Denmark","Sweden","Türkiye","Italy","Spain","Ireland"];
+const NORTH_AMERICA=["United States","Canada"];
+const CONTINENTS=["Europe","North America","Asia","Africa","South America","Oceania"];
+function continentOf(country){ if(EUROPE.includes(country))return "Europe"; if(NORTH_AMERICA.includes(country))return "North America"; return "Other"; }
+
+const CITIES = {
+  "Prague":{country:"Czechia",lat:50.08,lng:14.44},"Brno":{country:"Czechia",lat:49.19,lng:16.61},
+  "Bratislava":{country:"Slovakia",lat:48.15,lng:17.11},"Košice":{country:"Slovakia",lat:48.72,lng:21.26},
+  "Vienna":{country:"Austria",lat:48.21,lng:16.37},"Berlin":{country:"Germany",lat:52.52,lng:13.40},
+  "Munich":{country:"Germany",lat:48.14,lng:11.58},"Hamburg":{country:"Germany",lat:53.55,lng:9.99},
+  "Frankfurt":{country:"Germany",lat:50.11,lng:8.68},"Zürich":{country:"Switzerland",lat:47.37,lng:8.54},
+  "Geneva":{country:"Switzerland",lat:46.20,lng:6.14},"London":{country:"United Kingdom",lat:51.51,lng:-0.13},
+  "Cambridge":{country:"United Kingdom",lat:52.20,lng:0.12},"Amsterdam":{country:"Netherlands",lat:52.37,lng:4.90},
+  "Paris":{country:"France",lat:48.86,lng:2.35},"Lisbon":{country:"Portugal",lat:38.72,lng:-9.14},
+  "Copenhagen":{country:"Denmark",lat:55.68,lng:12.57},"Stockholm":{country:"Sweden",lat:59.33,lng:18.06},
+  "Istanbul":{country:"Türkiye",lat:41.01,lng:28.98},"Milan":{country:"Italy",lat:45.46,lng:9.19},
+  "Madrid":{country:"Spain",lat:40.42,lng:-3.70},"Dublin":{country:"Ireland",lat:53.35,lng:-6.26},
+  "San Francisco":{country:"United States",lat:37.77,lng:-122.42},"Mountain View":{country:"United States",lat:37.39,lng:-122.08},
+  "San Jose":{country:"United States",lat:37.34,lng:-121.89},"Santa Clara":{country:"United States",lat:37.35,lng:-121.96},
+  "Seattle":{country:"United States",lat:47.61,lng:-122.33},"New York":{country:"United States",lat:40.71,lng:-74.01},
+  "Boston":{country:"United States",lat:42.36,lng:-71.06},"Grand Rapids":{country:"United States",lat:42.96,lng:-85.67},
+  "Toronto":{country:"Canada",lat:43.65,lng:-79.38},
+};
+const COMPANIES = ["Google","KInIT","Wezeo","LEAF","BMW","Amazon","Microsoft","Meta","DeepMind","Apple","NVIDIA","ESET","Photoneo","Sygic","Roche","Anthropic","OpenAI","IBM Research","ETH Zürich","TU Munich"];
+const ROLES = ["Machine Learning Engineer","Principal Scientist","Research Scientist","AI Engineer and Architect","Co-founder & CEO","Head of Design","Quantitative Researcher","Deep Learning Research Scientist","VP & GM","PhD Researcher","Data Scientist","ML Researcher and Engineer","CTO","Robotics Engineer","NLP Engineer","Computer Vision Engineer","Product Manager, AI","Applied Scientist","Founder"];
+const MALE_FIRST = ["Adam","Andrej","Boris","Branislav","Brano","Dalibor","Daniel","Dávid","Filip","Igor","Ivan","Jakub","Juraj","Marek","Martin","Matej","Michal","Milan","Ondrej","Pavol","Peter","Rastislav","Richard","Róbert","Samuel","Tomáš","Viktor","Vladimír","Marián","Tibor"];
+const FEMALE_FIRST = ["Katarína","Lucia","Simona","Zuzana","Eva","Lenka","Mária","Andrea","Petra","Veronika","Jana","Barbora","Nina","Klára","Soňa","Dominika","Michaela","Táňa"];
+const MALE_LAST = ["Osuský","Danko","Tvaroska","Vargic","Homola","Majerčák","Hanzely","Mikulina","Viola","Novák","Horváth","Kováč","Baláž","Krajčovič","Sýkora","Beňo","Dubovský","Gaži","Halás","Kollár","Lukáč","Mráz","Rusnák","Sabo","Tóth","Urban","Zeman","Bača","Cibula","Petráš"];
+const FEMALE_LAST = ["Osuská","Danková","Nováková","Horváthová","Kováčová","Balážová","Krajčovičová","Sýkorová","Beňová","Dubovská","Gažiová","Halásová","Kollárová","Lukáčová","Mrázová","Rusnáková","Sabová","Tóthová","Urbanová","Zemanová"];
+const EXP_POOL = [
+  {c:"Google",r:"Senior Research Scientist",p:"2021 — Present"},{c:"Amazon",r:"Applied Scientist",p:"2019 — 2022"},
+  {c:"Microsoft",r:"ML Engineer",p:"2018 — 2021"},{c:"BMW",r:"AI Engineer",p:"2020 — Present"},
+  {c:"DeepMind",r:"Research Engineer",p:"2020 — 2023"},{c:"ESET",r:"Data Scientist",p:"2016 — 2019"},
+  {c:"KInIT",r:"Researcher",p:"2021 — Present"},{c:"Meta",r:"Software Engineer, ML",p:"2019 — 2022"},
+  {c:"NVIDIA",r:"Deep Learning Engineer",p:"2022 — Present"},{c:"Photoneo",r:"Computer Vision Lead",p:"2017 — 2021"},
+  {c:"Roche",r:"Data Science Manager",p:"2020 — Present"},{c:"Sygic",r:"Backend & AI Engineer",p:"2015 — 2018"},
+];
+const EDU_POOL = [
+  {s:"Comenius University, Bratislava",d:"M.Sc. Computer Science"},{s:"Slovak University of Technology",d:"B.Sc. Informatics"},
+  {s:"Masaryk University, Brno",d:"B.Sc. Computer Science"},{s:"ETH Zürich",d:"M.Sc. Data Science"},
+  {s:"Technical University of Munich",d:"M.Sc. Data Engineering & Analytics"},{s:"University of Cambridge",d:"Ph.D. Machine Learning"},
+  {s:"Czech Technical University",d:"Ph.D. Artificial Intelligence"},{s:"Technical University of Košice",d:"M.Sc. Cybernetics"},
+];
+const SKILL_POOL = ["Python","PyTorch","TensorFlow","Deep Learning","NLP","Computer Vision","MLOps","Reinforcement Learning","Data Engineering","Statistics","JAX","Kubernetes","LLMs","Recommender Systems","Optimization","C++","Research","Product Strategy"];
+
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296;};}
+function pick(rng,arr,n){const c=[...arr];const out=[];for(let i=0;i<n&&c.length;i++){out.push(c.splice(Math.floor(rng()*c.length),1)[0]);}return out;}
+
+function buildPeople(){
+  const cityNames=Object.keys(CITIES); const people=[];
+  for(let i=0;i<54;i++){
+    const rng=mulberry32(i*7919+13);
+    const female=((i*13+7)%10)<3;
+    const first=(female?FEMALE_FIRST:MALE_FIRST)[Math.floor(rng()*(female?FEMALE_FIRST:MALE_FIRST).length)];
+    const last=(female?FEMALE_LAST:MALE_LAST)[Math.floor(rng()*(female?FEMALE_LAST:MALE_LAST).length)];
+    const name=first+" "+last;
+    const cityName=cityNames[Math.floor(rng()*cityNames.length)]; const city=CITIES[cityName];
+    const role=ROLES[Math.floor(rng()*ROLES.length)]; const company=COMPANIES[Math.floor(rng()*COMPANIES.length)];
+    const cats=pick(rng,CATEGORIES,1+Math.floor(rng()*2)); const pron=female?"She":"He";
+    const about=`${name} is a ${role.toLowerCase()} based in ${cityName}, ${city.country}. ${pron} works at ${company}, focusing on ${cats.join(", ").toLowerCase()}. ${pron} combines hands-on engineering with applied research, and has collaborated with both fast-growing startups and large organizations across Europe and the US. ${pron} is part of the global Slovak AI community and open to collaboration, mentoring and knowledge exchange.`;
+    people.push({ id:"p"+i, type:"person", name, role, company, gender:female?"f":"m", continent:continentOf(city.country),
+      city:cityName, country:city.country, lat:city.lat, lng:city.lng, categories:cats,
+      photo:`https://randomuser.me/api/portraits/${female?"women":"men"}/${i%99}.jpg`,
+      about, experience:pick(rng,EXP_POOL,3), education:pick(rng,EDU_POOL,2), skills:pick(rng,SKILL_POOL,5+Math.floor(rng()*2)),
+      social:{linkedin:"#",github:"#",twitter:"#"} });
+  }
+  return people;
+}
+const PEOPLE=buildPeople();
+
+function buildEvents(){
+  const ids=(arr)=>arr.map(n=>"p"+n);
+  const mk=(id,title,cityName,date,time,cats,company,kw,desc,att,lock)=>{ const c=CITIES[cityName];
+    return {id,type:"event",title,city:cityName,country:c.country,continent:continentOf(c.country),lat:c.lat,lng:c.lng,date,time,categories:cats,company,about:desc,attendees:att,
+      photo:`https://loremflickr.com/900/520/${kw}?lock=${lock}`, thumb:`https://loremflickr.com/160/160/${kw}?lock=${lock}`}; };
+  return [
+    mk("e0","Slovak AI Summit 2026","Bratislava","2026-09-24","09:00",["Machine Learning","Business","Trustworthy AI"],"KInIT","artificial,intelligence,conference",
+      "The flagship gathering of the Slovak AI community — a full day of keynotes, panels and networking bringing together researchers, founders and engineers from around the world. Expect talks on foundation models, responsible AI and building AI companies out of Central Europe.",ids([0,3,6,9,12,15,21,30]),11),
+    mk("e1","Machine Learning Meetup","Prague","2026-07-16","18:00",["Machine Learning","Data Analysis & Processing"],"KInIT","technology,meetup,laptop",
+      "A relaxed evening meetup for ML practitioners. Two lightning talks followed by open discussion and drinks. This edition focuses on practical MLOps and scaling training pipelines.",ids([1,4,7,10,13]),12),
+    mk("e2","Computer Vision Workshop","Zürich","2026-08-08","10:00",["Computer Vision","Robotics"],"ETH Zürich","computer,technology,camera",
+      "Hands-on workshop covering modern computer vision — from detection and segmentation to 3D perception for robotics. Bring a laptop; datasets and notebooks provided.",ids([2,5,8,11,14,17]),13),
+    mk("e3","NLP & LLMs Conference","Vienna","2026-10-02","09:30",["Natural Language Processing","Artificial General Intelligence"],"TU Munich","conference,speaker,technology",
+      "A two-day conference on natural language processing and large language models, with a research track and an applied track. Topics include retrieval, evaluation and multilingual models.",ids([0,6,16,19,22,25,28]),14),
+    mk("e4","Trustworthy AI Panel","Berlin","2026-11-13","17:00",["Trustworthy AI","Business"],"Anthropic","panel,conference,technology",
+      "An expert panel on safety, fairness and regulation in AI, discussing what the EU AI Act means in practice for teams shipping AI products.",ids([3,9,18,24,27]),15),
+    mk("e5","Robotics Demo Day","Munich","2026-09-11","13:00",["Robotics","Computer Vision","Planning & Reasoning"],"BMW","robot,robotics,technology",
+      "Live demos from robotics teams and startups — manipulation, autonomous navigation and human-robot interaction. Networking reception to follow.",ids([6,11,20,23,26]),16),
+    mk("e6","AI in Business Forum","London","2026-12-04","09:00",["Business","Prediction & Optimization","AI Applications"],"Google","business,conference,office",
+      "A forum for leaders applying AI in industry. Case studies on forecasting, optimization and deploying AI at scale, plus a fireside chat with Slovak AI founders abroad.",ids([0,15,21,29,31,33]),17),
+    mk("e7","Slovak AI Diaspora Mixer","San Francisco","2026-11-20","19:00",["Business","Machine Learning"],"Wezeo","networking,people,event",
+      "An informal mixer for Slovaks working in AI in the Bay Area and beyond. Come meet peers, share what you're building and grow the community.",ids([4,8,13,32,34,36]),18),
+  ];
+}
+const EVENTS=buildEvents();
+const ALL_COMPANIES=Array.from(new Set([...PEOPLE.map(p=>p.company),...EVENTS.map(e=>e.company)])).sort();
+const byId=(id)=>PEOPLE.find(p=>p.id===id);
+function fmtDate(iso){const d=new Date(iso+"T00:00:00");return d.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"});}
+function recommend(entity){
+  if(entity.type==="person"){ const same=PEOPLE.filter(p=>p.id!==entity.id&&p.categories.some(c=>entity.categories.includes(c))); return (same.length>=3?same:PEOPLE.filter(p=>p.id!==entity.id)).slice(0,3); }
+  return EVENTS.filter(e=>e.id!==entity.id).slice(0,3);
+}
+
+/* ============================================================ ICONS ============================================================ */
+const I=({d,size=18,sw=1.7,fill="none",cn=""})=>(
+  <svg className={cn} width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round">{d}</svg>
+);
+const Icon={
+  pin:(p)=><I {...p} d={<><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0Z"/><circle cx="12" cy="10" r="3"/></>} />,
+  list:(p)=><I {...p} d={<><line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/><circle cx="3.5" cy="6" r="1.2"/><circle cx="3.5" cy="12" r="1.2"/><circle cx="3.5" cy="18" r="1.2"/></>} />,
+  map:(p)=><I {...p} d={<><polygon points="1 6 8 3 16 6 23 3 23 18 16 21 8 18 1 21 1 6"/><line x1="8" y1="3" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="21"/></>} />,
+  grid:(p)=><I {...p} d={<><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></>} />,
+  rows:(p)=><I {...p} d={<><rect x="3" y="4" width="18" height="5" rx="1.5"/><rect x="3" y="15" width="18" height="5" rx="1.5"/></>} />,
+  plus:(p)=><I {...p} d={<><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></>} />,
+  minus:(p)=><I {...p} d={<line x1="5" y1="12" x2="19" y2="12"/>} />,
+  x:(p)=><I {...p} d={<><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></>} />,
+  chevron:(p)=><I {...p} d={<polyline points="6 9 12 15 18 9"/>} />,
+  back:(p)=><I {...p} d={<polyline points="15 18 9 12 15 6"/>} />,
+  calendar:(p)=><I {...p} d={<><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></>} />,
+  spark:(p)=><I {...p} d={<path d="M12 4 L13.7 10.3 L20 12 L13.7 13.7 L12 20 L10.3 13.7 L4 12 L10.3 10.3 Z"/>} />,
+  send:(p)=><I {...p} d={<><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></>} />,
+  menu:(p)=><I {...p} d={<><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></>} />,
+  check:(p)=><I {...p} d={<polyline points="4 12 9 17 20 6"/>} />,
+  sliders:(p)=><I {...p} d={<><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></>} />,
+  search:(p)=><I {...p} d={<><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></>} />,
+  building:(p)=><I {...p} d={<><rect x="4" y="3" width="16" height="18" rx="1.5"/><line x1="9" y1="7" x2="9" y2="7"/><line x1="15" y1="7" x2="15" y2="7"/><line x1="9" y1="11" x2="9" y2="11"/><line x1="15" y1="11" x2="15" y2="11"/><path d="M10 21v-4h4v4"/></>} />,
+  globe:(p)=><I {...p} d={<><circle cx="12" cy="12" r="9"/><line x1="3" y1="12" x2="21" y2="12"/><path d="M12 3a15 15 0 0 1 0 18 15 15 0 0 1 0-18Z"/></>} />,
+  users:(p)=><I {...p} d={<><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></>} />,
+  linkedin:(p)=><I {...p} sw={0} fill="currentColor" d={<path d="M4.98 3.5a2.5 2.5 0 1 1 0 5 2.5 2.5 0 0 1 0-5ZM3 9h4v12H3V9Zm6 0h3.8v1.7h.05c.53-.95 1.83-1.95 3.77-1.95 4.03 0 4.78 2.5 4.78 5.75V21H17.6v-5.3c0-1.26-.02-2.9-1.77-2.9-1.77 0-2.04 1.38-2.04 2.8V21H9V9Z"/>} />,
+  github:(p)=><I {...p} sw={0} fill="currentColor" d={<path d="M12 2C6.48 2 2 6.58 2 12.25c0 4.53 2.87 8.37 6.84 9.73.5.1.68-.22.68-.49v-1.7c-2.78.62-3.37-1.22-3.37-1.22-.46-1.18-1.11-1.5-1.11-1.5-.9-.64.07-.62.07-.62 1 .07 1.53 1.05 1.53 1.05.9 1.57 2.34 1.12 2.91.85.09-.66.35-1.12.63-1.38-2.22-.26-4.56-1.14-4.56-5.05 0-1.12.39-2.03 1.03-2.75-.1-.26-.45-1.3.1-2.7 0 0 .84-.28 2.75 1.05a9.3 9.3 0 0 1 5 0c1.91-1.33 2.75-1.05 2.75-1.05.55 1.4.2 2.44.1 2.7.64.72 1.03 1.63 1.03 2.75 0 3.92-2.34 4.78-4.57 5.04.36.32.68.94.68 1.9v2.81c0 .27.18.6.69.49A10.02 10.02 0 0 0 22 12.25C22 6.58 17.52 2 12 2Z"/>} />,
+  twitter:(p)=><I {...p} sw={0} fill="currentColor" d={<path d="M18.9 2H22l-7 8 8.2 12H16l-5-7.3L5.2 22H2l7.5-8.6L1.6 2H9l4.5 6.6L18.9 2Zm-1.1 18h1.7L7.3 3.8H5.5L17.8 20Z"/>} />,
+};
+const catIcon=(name,size=17)=>{
+  const P=(dd)=><I d={dd} size={size} sw={1.6} />;
+  switch(name){
+    case "Machine Learning":return P(<><circle cx="12" cy="12" r="3"/><circle cx="5" cy="6" r="1.6"/><circle cx="19" cy="6" r="1.6"/><circle cx="5" cy="18" r="1.6"/><circle cx="19" cy="18" r="1.6"/><path d="M6.4 6.8 10 10.6M17.6 6.8 14 10.6M6.4 17.2 10 13.4M17.6 17.2 14 13.4"/></>);
+    case "Computer Vision":return P(<><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="2.5"/></>);
+    case "Natural Language Processing":return P(<path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2Z"/>);
+    case "Data Analysis & Processing":return P(<><line x1="4" y1="20" x2="4" y2="10"/><line x1="10" y1="20" x2="10" y2="4"/><line x1="16" y1="20" x2="16" y2="13"/><line x1="20" y1="20" x2="20" y2="7"/></>);
+    case "Planning & Reasoning":return P(<><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><path d="M10 6.5h5M6.5 10v5M10 17.5h4M17.5 10v4"/></>);
+    case "Prediction & Optimization":return P(<><polyline points="3 17 9 11 13 15 21 7"/><polyline points="15 7 21 7 21 13"/></>);
+    case "Trustworthy AI":return P(<><path d="M12 3l7 3v5c0 5-3.5 8-7 10-3.5-2-7-5-7-10V6Z"/><path d="M9.5 12l2 2 3.5-4"/></>);
+    case "Artificial General Intelligence":return P(<><path d="M12 3a5 5 0 0 1 5 5c0 1.3-.5 2.4-1.3 3.3.8.9 1.3 2 1.3 3.2a5 5 0 0 1-10 0c0-1.2.5-2.3 1.3-3.2A4.9 4.9 0 0 1 7 8a5 5 0 0 1 5-5Z"/><path d="M12 3v18"/></>);
+    case "AI Applications":return P(<><rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><path d="M14 17.5h7M17.5 14v7"/></>);
+    case "Environment":return P(<><path d="M11 20a8 8 0 1 0 0-16"/><path d="M11 20c0-6 3-10 8-11-1 6-4 10-8 11Z"/></>);
+    case "Infrastructure":return P(<><rect x="2" y="3" width="20" height="6" rx="1.5"/><rect x="2" y="15" width="20" height="6" rx="1.5"/><line x1="12" y1="9" x2="12" y2="15"/></>);
+    case "Robotics":return P(<><rect x="5" y="8" width="14" height="10" rx="2"/><path d="M12 8V5M9 5h6"/><circle cx="9" cy="13" r="1"/><circle cx="15" cy="13" r="1"/><path d="M2 12h3M19 12h3"/></>);
+    case "Business":return P(<><rect x="3" y="7" width="18" height="13" rx="2"/><path d="M8 7V5a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></>);
+    case "Cognitive Science":return P(<path d="M15.5 4A4.5 4.5 0 0 1 20 8.5c0 1 .5 1.6 1 2.2.5.7.5 1.8-.3 2.4-.4.3-.7.8-.7 1.4A4.5 4.5 0 0 1 12 18.5 4.5 4.5 0 0 1 4 15c-.7-.2-1.2-.9-1.2-1.7 0-.6-.2-1-.5-1.5C1.6 10.9 2 9.5 3 9c.3-2.8 2.7-5 5.5-5 1.3 0 2.5.5 3.5 1.3A4.5 4.5 0 0 1 15.5 4Z"/>);
+    case "Complex Systems":return P(<><circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="M8 6h8M7 8l4 8M17 8l-4 8"/></>);
+    default:return P(<circle cx="12" cy="12" r="8"/>);
+  }
+};
+
+/* ============================================================ SHARED VISUALS ============================================================ */
+function Photo({src,alt,initials,hue,className,style}){
+  const [err,setErr]=useState(false);
+  if(err||!src) return <div className={"flex items-center justify-center text-white font-semibold "+className} style={{...style,background:`hsl(${hue} 55% 55%)`}}>{initials}</div>;
+  return <img src={src} onError={()=>setErr(true)} className={className} style={style} alt={alt}/>;
+}
+const initialsOf=(n)=>n.split(" ").map(w=>w[0]).slice(0,2).join("");
+const hueOf=(n)=>(n.charCodeAt(0)*31+n.charCodeAt(n.length-1)*13)%360;
+function Avatar({person,size=44,ring=true}){
+  return <Photo src={person.photo} alt={person.name} initials={initialsOf(person.name)} hue={hueOf(person.name)}
+    className={"rounded-full object-cover flex-shrink-0 "+(ring?"ring-2 ring-white shadow":"")} style={{width:size,height:size,fontSize:size*0.36}}/>;
+}
+function Logo({dark=false}){
+  const [err,setErr]=useState(false);
+  if(!dark && !err) return <img src="slovaks-ai_logo-dark.png" alt="slovaks.ai" onError={()=>setErr(true)} className="h-8 md:h-9 w-auto select-none"/>;
+  return (
+    <div className="flex items-center gap-2.5 select-none">
+      <svg width="30" height="30" viewBox="0 0 40 40" fill="none" aria-hidden="true">
+        <defs><linearGradient id="lg" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stopColor="#59d0ff"/><stop offset="1" stopColor="#2196F3"/></linearGradient></defs>
+        <path d="M11 12 L19 9 M19 9 L30 11 M19 9 L21 20 M21 20 L11 28 M21 20 L31 30" stroke="#5cbef5" strokeWidth="1.8" strokeLinecap="round"/>
+        <circle cx="11" cy="12" r="3.4" fill="url(#lg)"/><circle cx="19" cy="9" r="2.6" fill="url(#lg)"/><circle cx="30" cy="11" r="2.4" fill="url(#lg)"/>
+        <circle cx="21" cy="20" r="4.2" fill="url(#lg)"/><circle cx="11" cy="28" r="3" fill="url(#lg)"/><circle cx="31" cy="30" r="2.4" fill="url(#lg)"/>
+      </svg>
+      <span className={"font-logo text-[22px] font-semibold tracking-tight "+(dark?"text-white":"text-[#33415c]")}>slovaks.ai</span>
+    </div>
+  );
+}
+function EntityCard({e,onOpen,showButton=false}){
+  const isP=e.type==="person";
+  return (
+    <div className={"bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition p-3 "+(showButton?"w-64":"")}>
+      <button onClick={()=>onOpen(e)} className="block w-full text-left">
+        <div className="rounded-xl overflow-hidden bg-slate-100 aspect-[4/3] mb-3 relative">
+          {isP ? <Photo src={e.photo} alt={e.name} initials={initialsOf(e.name)} hue={hueOf(e.name)} className="w-full h-full object-cover text-3xl"/>
+               : <Photo src={e.photo} alt={e.title} initials="EV" hue={210} className="w-full h-full object-cover"/>}
+          {!isP && <span className="absolute top-2 left-2 flex items-center gap-1 bg-white/95 text-brand text-[11px] font-semibold px-2 py-1 rounded-lg shadow-sm"><Icon.calendar size={12}/>Event</span>}
+        </div>
+        <div className="px-1">
+          <div className="font-semibold text-[15px] text-ink leading-snug">{isP?e.name:e.title}</div>
+          <div className="text-brand text-[13px] mt-0.5 leading-snug">{isP?e.role:fmtDate(e.date)+" · "+e.time}</div>
+          <div className="text-slate-400 text-[12px] mt-1.5 flex items-center gap-1"><Icon.pin size={12}/>{e.city}, {e.country}</div>
+        </div>
+      </button>
+      {showButton && <button onClick={()=>onOpen(e)} className="mt-3 w-full py-2.5 rounded-xl bg-brandSoft text-brandDark text-[14px] font-semibold hover:brightness-95 transition">{isP?"View Profile":"View Event"}</button>}
+    </div>
+  );
+}
+function MiniRow({e,onOpen}){
+  const isP=e.type==="person";
+  return (
+    <button onClick={()=>onOpen(e)} className="flex items-center gap-3 p-2 rounded-xl border border-slate-100 hover:border-brand/40 hover:bg-brandSoft/20 text-left transition w-full">
+      {isP?<Avatar person={e} size={40}/>:<span className="w-10 h-10 rounded-lg overflow-hidden flex-shrink-0"><Photo src={e.thumb} alt="" initials="EV" hue={210} className="w-full h-full object-cover"/></span>}
+      <div className="min-w-0"><div className="font-medium text-[14px] truncate">{isP?e.name:e.title}</div><div className="text-brand text-[12px] truncate">{isP?e.role:fmtDate(e.date)+" · "+e.city}</div></div>
+    </button>
+  );
+}
+function EmptyState({label}){
+  return <div className="col-span-full py-16 text-center"><div className="mx-auto w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-300 mb-3"><Icon.users size={22}/></div><p className="text-slate-500 text-[15px]">Ľutujeme, {label}.</p></div>;
+}
+
+/* ============================================================ HEADER ============================================================ */
+function Header({page,go,onRegister,onLogin,auth,onProfile,onLogout}){
+  const [open,setOpen]=useState(false);
+  const items=[["people","People"],["events","Events"],["about","About Us"]];
+  return (
+    <header className="relative z-40 bg-white border-b border-slate-100 flex-shrink-0">
+      <div className="px-4 md:px-6 h-16 flex items-center justify-between">
+        <button onClick={()=>go("app")}><Logo/></button>
+        <nav className="hidden md:flex items-center gap-6 text-[15px]">
+          {items.map(([k,l])=><button key={k} onClick={()=>go(k)} className={"hover:text-brand transition "+(page===k?"text-ink font-medium":"text-slate-600")}>{l}</button>)}
+          {auth
+            ? <AuthMenu auth={auth} onProfile={onProfile} onLogout={onLogout}/>
+            : <div className="flex items-center gap-2">
+                <button onClick={onLogin} className="px-4 py-2 rounded-lg text-slate-700 font-medium hover:bg-slate-100 transition">Prihlásiť sa</button>
+                <button onClick={onRegister} className="px-4 py-2 rounded-lg bg-brand text-white font-medium hover:bg-brandDark transition">Registruj sa</button>
+              </div>}
+        </nav>
+        <button className="md:hidden w-10 h-10 flex items-center justify-center text-slate-700" onClick={()=>setOpen(o=>!o)}>{open?<Icon.x size={22}/>:<Icon.menu size={22}/>}</button>
+      </div>
+      {open && (
+        <div className="md:hidden absolute top-full left-0 right-0 bg-white border-b border-slate-100 shadow-lg px-4 py-3 flex flex-col gap-1 text-[15px] fade-in">
+          {items.map(([k,l])=><button key={k} onClick={()=>{go(k);setOpen(false);}} className={"text-left px-3 py-2.5 rounded-lg hover:bg-slate-50 "+(page===k?"text-brand font-medium":"text-slate-700")}>{l}</button>)}
+          {auth
+            ? <>
+                <div className="flex items-center gap-2.5 px-3 py-2.5"><AuthAvatar auth={auth} size={30}/><div><div className="font-medium">{auth.firstName} {auth.lastName}</div>{auth.role==="expert"&&<span className="text-[11px] text-brandDark font-medium">AI odborník</span>}</div></div>
+                {auth.role==="expert" && <button onClick={()=>{onProfile();setOpen(false);}} className="text-left px-3 py-2.5 rounded-lg hover:bg-slate-50 text-slate-700">Upraviť profil</button>}
+                <button onClick={()=>{onLogout();setOpen(false);}} className="text-left px-3 py-2.5 rounded-lg text-red-500 hover:bg-red-50 font-medium">Odhlásiť sa</button>
+              </>
+            : <>
+                <button onClick={()=>{onLogin();setOpen(false);}} className="text-left px-3 py-2.5 rounded-lg hover:bg-slate-50 text-slate-700 font-medium">Prihlásiť sa</button>
+                <button onClick={()=>{onRegister();setOpen(false);}} className="text-left px-3 py-2.5 rounded-lg bg-brand text-white font-medium">Registruj sa</button>
+              </>}
+        </div>
+      )}
+    </header>
+  );
+}
+
+/* ============================================================ FILTERS ============================================================ */
+function Checkbox({on,onClick,children}){
+  return (
+    <button onClick={onClick} className="flex items-center gap-2.5 py-2 text-left w-full">
+      <span className={"w-4.5 h-4.5 w-[18px] h-[18px] rounded flex items-center justify-center flex-shrink-0 "+(on?"bg-brand text-white":"border border-slate-300")}>{on&&<Icon.check size={12} sw={3}/>}</span>
+      <span className={on?"text-ink font-medium":"text-slate-700"}>{children}</span>
+    </button>
+  );
+}
+function FiltersModal({initial,onApply,onClose}){
+  const [d,setD]=useState(initial);
+  const [q,setQ]=useState("");
+  const refs={category:useRef(),focus:useRef(),location:useRef(),company:useRef()};
+  const scroller=useRef(null);
+  const scrollTo=(k)=>refs[k].current&&refs[k].current.scrollIntoView({behavior:"smooth",block:"start"});
+  const tArr=(key,v)=>setD(s=>({...s,[key]:s[key].includes(v)?s[key].filter(x=>x!==v):[...s[key],v]}));
+  const focusOpts=CATEGORIES.filter(c=>c.toLowerCase().includes(q.toLowerCase()));
+  const compOpts=ALL_COMPANIES.filter(c=>c.toLowerCase().includes(q.toLowerCase()));
+  const nav=[["category","Category"],["focus","Zameranie"],["location","Location"],["company","Company"]];
+  const SecTitle=({children})=><h3 className="text-[15px] font-bold mb-3">{children}</h3>;
+  return (
+    <div className="fixed inset-0 z-[70] bg-black/40 flex items-center justify-center p-3 md:p-6 fade-in" onClick={onClose}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-[1000px] h-[86vh] flex flex-col overflow-hidden" onClick={e=>e.stopPropagation()}>
+        <div className="flex items-center gap-3 px-5 md:px-7 py-4 border-b border-slate-100 flex-shrink-0">
+          <h2 className="text-xl font-bold">Filters</h2>
+          <div className="ml-auto flex items-center gap-3">
+            <div className="hidden sm:flex items-center gap-2 bg-slate-100 rounded-lg px-3 py-2 w-56">
+              <Icon.search size={16} cn="text-slate-400"/>
+              <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search…" className="bg-transparent outline-none text-[14px] w-full"/>
+            </div>
+            <button onClick={onClose} className="w-9 h-9 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500"><Icon.x size={18}/></button>
+          </div>
+        </div>
+        <div className="flex-1 min-h-0 flex">
+          <div className="hidden md:block w-48 flex-shrink-0 border-r border-slate-100 p-3">
+            {nav.map(([k,l])=><button key={k} onClick={()=>scrollTo(k)} className="block w-full text-left px-3 py-2.5 rounded-lg text-[15px] text-slate-600 hover:bg-slate-50 hover:text-ink">{l}</button>)}
+          </div>
+          <div ref={scroller} className="flex-1 overflow-y-auto nice-scroll lock-scroll px-5 md:px-8 py-6">
+            <section ref={refs.category} className="scroll-mt-4">
+              <SecTitle>Category</SecTitle>
+              <div className="grid grid-cols-2 gap-x-6">
+                <Checkbox on={d.people} onClick={()=>setD(s=>({...s,people:!s.people}))}>People <span className="text-slate-400">· {PEOPLE.length}</span></Checkbox>
+                <Checkbox on={d.events} onClick={()=>setD(s=>({...s,events:!s.events}))}>Events <span className="text-slate-400">· {EVENTS.length}</span></Checkbox>
+              </div>
+            </section>
+            <div className="h-px bg-slate-100 my-6"/>
+            <section ref={refs.focus} className="scroll-mt-4">
+              <SecTitle>Zameranie</SecTitle>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6">
+                {focusOpts.map(c=><Checkbox key={c} on={d.focus.includes(c)} onClick={()=>tArr("focus",c)}><span className="inline-flex items-center gap-2"><span className="text-slate-400">{catIcon(c,15)}</span>{c}</span></Checkbox>)}
+                {focusOpts.length===0 && <p className="text-slate-400 text-[14px] py-2">No match.</p>}
+              </div>
+            </section>
+            <div className="h-px bg-slate-100 my-6"/>
+            <section ref={refs.location} className="scroll-mt-4">
+              <SecTitle>Location</SecTitle>
+              <div className="flex flex-wrap gap-2.5">
+                {CONTINENTS.map(c=>{const on=d.location.includes(c);return (
+                  <button key={c} onClick={()=>tArr("location",c)} className={"flex items-center gap-2 px-4 py-2.5 rounded-xl border text-[14px] transition "+(on?"border-brand bg-brandSoft/40 text-brandDark font-medium":"border-slate-200 text-slate-600 hover:border-slate-300")}>
+                    <Icon.globe size={16}/>{c}</button>);})}
+              </div>
+            </section>
+            <div className="h-px bg-slate-100 my-6"/>
+            <section ref={refs.company} className="scroll-mt-4">
+              <SecTitle>Company</SecTitle>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6">
+                {compOpts.map(c=><Checkbox key={c} on={d.company.includes(c)} onClick={()=>tArr("company",c)}>{c}</Checkbox>)}
+                {compOpts.length===0 && <p className="text-slate-400 text-[14px] py-2">No match.</p>}
+              </div>
+            </section>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 px-5 md:px-7 py-4 border-t border-slate-100 flex-shrink-0">
+          <button onClick={()=>setD({people:true,events:true,focus:[],location:[],company:[]})} className="text-[14px] text-slate-500 hover:text-slate-700 underline">Clear all</button>
+          <button onClick={()=>onApply(d)} className="ml-auto px-7 py-2.5 rounded-xl bg-brand text-white font-semibold hover:bg-brandDark transition">Apply filters</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+function activeChips(filter){
+  const chips=[];
+  if(!filter.people) chips.push({key:"cat:people",label:"No people",remove:(f)=>({...f,people:true})});
+  if(!filter.events) chips.push({key:"cat:events",label:"No events",remove:(f)=>({...f,events:true})});
+  filter.focus.forEach(c=>chips.push({key:"f:"+c,label:c,remove:(f)=>({...f,focus:f.focus.filter(x=>x!==c)})}));
+  filter.location.forEach(c=>chips.push({key:"l:"+c,label:c,remove:(f)=>({...f,location:f.location.filter(x=>x!==c)})}));
+  filter.company.forEach(c=>chips.push({key:"c:"+c,label:c,remove:(f)=>({...f,company:f.company.filter(x=>x!==c)})}));
+  return chips;
+}
+function MultiDropdown({label,options,selected,onToggle,renderIcon}){
+  const [open,setOpen]=useState(false);
+  const [rect,setRect]=useState(null);
+  const btnRef=useRef(null);
+  useEffect(()=>{
+    if(!open)return;
+    const close=(e)=>{ if(btnRef.current&&btnRef.current.contains(e.target))return; setOpen(false); };
+    const onWin=()=>setOpen(false);
+    document.addEventListener("mousedown",close); window.addEventListener("resize",onWin);
+    return()=>{document.removeEventListener("mousedown",close);window.removeEventListener("resize",onWin);};
+  },[open]);
+  const toggleOpen=()=>{ if(!open&&btnRef.current)setRect(btnRef.current.getBoundingClientRect()); setOpen(o=>!o); };
+  const count=selected.length;
+  return (
+    <>
+      <button ref={btnRef} onClick={toggleOpen} className={"px-3 py-2 rounded-lg text-[14px] whitespace-nowrap flex items-center gap-1.5 flex-shrink-0 transition border "+(count?"text-brand font-semibold bg-brandSoft/40 border-brand/30":"text-slate-600 hover:text-ink border-slate-200")}>
+        {label}{count>0&&<span className="min-w-5 h-5 px-1 rounded-full bg-brand text-white text-[11px] flex items-center justify-center">{count}</span>}
+        <Icon.chevron size={15} cn={"transition-transform "+(open?"rotate-180":"")}/>
+      </button>
+      {open&&rect&&(
+        <div className="fixed z-[65] w-64 bg-white rounded-xl shadow-xl border border-slate-100 p-1.5 fade-in" style={{left:Math.max(8,Math.min(rect.left,window.innerWidth-268)),top:rect.bottom+6}} onMouseDown={e=>e.stopPropagation()}>
+          <div className="max-h-72 overflow-y-auto nice-scroll pr-0.5">
+            {options.map(o=>{const on=selected.includes(o);return (
+              <button key={o} onClick={()=>onToggle(o)} className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left text-[14px] hover:bg-slate-50">
+                <span className={"w-[18px] h-[18px] rounded flex items-center justify-center flex-shrink-0 "+(on?"bg-brand text-white":"border border-slate-300")}>{on&&<Icon.check size={12} sw={3}/>}</span>
+                {renderIcon&&<span className="text-slate-400">{renderIcon(o)}</span>}
+                <span className={on?"text-ink font-medium":"text-slate-700"}>{o}</span>
+              </button>);})}
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+function FilterBar({filter,setFilter,onOpenModal}){
+  const chips=activeChips(filter);
+  const catSel=[filter.people&&"People",filter.events&&"Events"].filter(Boolean);
+  const tog=(key,v)=>setFilter(f=>({...f,[key]:f[key].includes(v)?f[key].filter(x=>x!==v):[...f[key],v]}));
+  return (
+    <div className="border-b border-slate-100 bg-white flex-shrink-0">
+      <div className="px-4 md:px-6 pt-3 pb-2 flex items-center gap-2 overflow-x-auto no-scrollbar">
+        <button onClick={onOpenModal} className="flex items-center gap-2 px-4 py-2 rounded-lg border border-slate-300 text-[14px] font-medium text-ink hover:border-slate-400 flex-shrink-0">
+          <Icon.sliders size={16}/> Filters {chips.length>0 && <span className="min-w-5 h-5 px-1 rounded-full bg-ink text-white text-[11px] flex items-center justify-center">{chips.length}</span>}
+        </button>
+        <span className="w-px h-6 bg-slate-200 mx-0.5 flex-shrink-0"/>
+        <MultiDropdown label="Category" options={["People","Events"]} selected={catSel} onToggle={(v)=>setFilter(f=>v==="People"?{...f,people:!f.people}:{...f,events:!f.events})}/>
+        <MultiDropdown label="Zameranie" options={CATEGORIES} selected={filter.focus} onToggle={(v)=>tog("focus",v)} renderIcon={(c)=>catIcon(c,16)}/>
+        <MultiDropdown label="Location" options={CONTINENTS} selected={filter.location} onToggle={(v)=>tog("location",v)}/>
+        <MultiDropdown label="Company" options={ALL_COMPANIES} selected={filter.company} onToggle={(v)=>tog("company",v)}/>
+      </div>
+      {chips.length>0 && (
+        <div className="px-4 md:px-6 pb-3 hidden md:flex flex-wrap gap-2">
+          {chips.map(ch=>(
+            <span key={ch.key} className="flex items-center gap-1.5 pl-3 pr-2 py-1.5 rounded-full bg-brandSoft/40 text-brandDark text-[13px] font-medium">
+              {ch.label}<button onClick={()=>setFilter(ch.remove(filter))} className="w-4 h-4 rounded-full bg-white/70 flex items-center justify-center hover:bg-white"><Icon.x size={11}/></button>
+            </span>
+          ))}
+          {chips.length>1 && <button onClick={()=>setFilter({people:true,events:true,focus:[],location:[],company:[]})} className="text-[13px] text-slate-400 hover:text-slate-600 underline ml-1">Clear</button>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ============================================================ MAP ============================================================ */
+function useWorld(){
+  const [world,setWorld]=useState(null);
+  useEffect(()=>{let ok=true;fetch("https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json").then(r=>r.json()).then(topo=>{if(ok)setWorld(topojson.feature(topo,topo.objects.countries));}).catch(()=>{});return()=>{ok=false;};},[]);
+  return world;
+}
+function EventMarker({e,hot,size=34}){
+  return (
+    <span className={"block rounded-[9px] overflow-hidden shadow-md ring-2 ring-white "+(hot?"border-[3px] border-brand":"border-2 border-brand")} style={{width:hot?size+6:size,height:hot?size+6:size}}>
+      <Photo src={e.thumb} alt={e.title} initials="EV" hue={210} className="w-full h-full object-cover"/>
+    </span>
+  );
+}
+function MapView({people,events,onOpen,highlighted,camRef,isMobile}){
+  const wrapRef=useRef(null); const world=useWorld();
+  const [size,setSize]=useState({w:1200,h:700});
+  const [cam,setCam]=useState({k:1,x:0,y:0});
+  const [hover,setHover]=useState(null);
+  const drag=useRef(null);
+  const hideTimer=useRef(null);
+  useEffect(()=>{const ro=new ResizeObserver(es=>{for(const e of es){const{width,height}=e.contentRect;setSize({w:width,h:height});}});if(wrapRef.current)ro.observe(wrapRef.current);return()=>ro.disconnect();},[]);
+  const projection=useMemo(()=>d3.geoMercator().center([12,38]).scale(size.w/6.6).translate([size.w/2,size.h/2]),[size.w,size.h]);
+  const pathGen=useMemo(()=>projection?d3.geoPath(projection):null,[projection]);
+  const allPts=useMemo(()=>[...people,...events].map(e=>{const p=projection([e.lng,e.lat]);return{e,bx:p[0],by:p[1]};}),[people,events,projection]);
+  const screen=(bx,by)=>({x:cam.x+cam.k*bx,y:cam.y+cam.k*by});
+
+  // unified clustering (people + events) — anything overlapping merges into a count bubble
+  const clusters=useMemo(()=>{
+    const R=46;
+    const nodes=allPts.map(p=>({e:p.e,bx:p.bx,by:p.by,sx:cam.x+cam.k*p.bx,sy:cam.y+cam.k*p.by,used:false}));
+    const out=[];
+    for(let i=0;i<nodes.length;i++){if(nodes[i].used)continue;const grp=[nodes[i]];nodes[i].used=true;for(let j=i+1;j<nodes.length;j++){if(nodes[j].used)continue;const dx=nodes[i].sx-nodes[j].sx,dy=nodes[i].sy-nodes[j].sy;if(dx*dx+dy*dy<R*R){grp.push(nodes[j]);nodes[j].used=true;}}out.push({members:grp,sx:grp.reduce((a,n)=>a+n.sx,0)/grp.length,sy:grp.reduce((a,n)=>a+n.sy,0)/grp.length});}
+    return out;
+  },[allPts,cam]);
+
+  const zoomAt=(factor,ox,oy)=>setCam(c=>{const nk=Math.max(1,Math.min(9,c.k*factor));const r=nk/c.k;return{k:nk,x:ox-r*(ox-c.x),y:oy-r*(oy-c.y)};});
+  useEffect(()=>{if(!camRef)return;camRef.current={fit:(ids)=>{const sel=allPts.filter(p=>ids.includes(p.e.id));if(!sel.length)return;const xs=sel.map(p=>p.bx),ys=sel.map(p=>p.by);const minx=Math.min(...xs),maxx=Math.max(...xs),miny=Math.min(...ys),maxy=Math.max(...ys);const spanx=Math.max(60,maxx-minx),spany=Math.max(60,maxy-miny);const k=Math.max(1,Math.min(6,Math.min((size.w*0.7)/spanx,(size.h*0.7)/spany)));const cx=(minx+maxx)/2,cy=(miny+maxy)/2;setCam({k,x:size.w/2-k*cx,y:size.h/2-k*cy});}};},[allPts,size]);
+  const onWheel=(e)=>{e.preventDefault();const r=wrapRef.current.getBoundingClientRect();zoomAt(e.deltaY<0?1.2:1/1.2,e.clientX-r.left,e.clientY-r.top);};
+  const onDown=(e)=>{drag.current={x:e.clientX,y:e.clientY,cx:cam.x,cy:cam.y,moved:false};};
+  const onMove=(e)=>{if(!drag.current)return;const dx=e.clientX-drag.current.x,dy=e.clientY-drag.current.y;if(Math.abs(dx)+Math.abs(dy)>3)drag.current.moved=true;setCam(c=>({...c,x:drag.current.cx+dx,y:drag.current.cy+dy}));};
+  const onUp=()=>{drag.current=null;};
+  const hlSet=highlighted&&highlighted.length?new Set(highlighted):null;
+  const openMarker=(e)=>{if(drag.current&&drag.current.moved)return;setHover(null);onOpen(e);};
+
+  return (
+    <div ref={wrapRef} className="relative w-full h-full overflow-hidden bg-[#d7ecfb] select-none" onWheel={onWheel} onMouseDown={onDown} onMouseMove={onMove} onMouseUp={onUp} onMouseLeave={onUp} style={{cursor:drag.current?"grabbing":"grab"}}>
+      <svg width={size.w} height={size.h} className="absolute inset-0"><g transform={`translate(${cam.x},${cam.y}) scale(${cam.k})`}>{world&&pathGen&&world.features.map((f,i)=><path key={i} d={pathGen(f)} className="map-country"/>)}</g></svg>
+      <div className="absolute inset-0">
+        {clusters.map((cl,i)=>{
+          if(cl.members.length===1){
+            const {e}=cl.members[0];const dim=hlSet&&!hlSet.has(e.id);const hot=hlSet&&hlSet.has(e.id);const isP=e.type==="person";
+            return (
+              <button key={e.id} className="absolute -translate-x-1/2 -translate-y-1/2 transition-opacity" style={{left:cl.sx,top:cl.sy,opacity:dim?0.28:1,zIndex:hot?32:(isP?10:22)}}
+                onMouseEnter={()=>{if(isMobile)return;if(hideTimer.current)clearTimeout(hideTimer.current);setHover({e,x:cl.sx,y:cl.sy});}} onMouseLeave={()=>{hideTimer.current=setTimeout(()=>setHover(null),160);}} onClick={(ev)=>{ev.stopPropagation();openMarker(e);}}>
+                {hot&&<span className={"absolute inset-0 "+(isP?"rounded-full":"rounded-[9px]")+" bg-brand pulse-ring"}/>}
+                {isP
+                  ? <span className={"block rounded-full "+(hot?"ring-[3px] ring-brand":"ring-2 ring-white")+" shadow-md"}><Avatar person={e} size={hot?46:40} ring={false}/></span>
+                  : <EventMarker e={e} hot={hot}/>}
+              </button>
+            );
+          }
+          const anyHot=hlSet&&cl.members.some(m=>hlSet.has(m.e.id));const allDim=hlSet&&!anyHot;
+          return <button key={"c"+i} className="absolute -translate-x-1/2 -translate-y-1/2 flex items-center justify-center rounded-full bg-brand text-white font-semibold shadow-lg ring-4 ring-white/70 transition-opacity" style={{left:cl.sx,top:cl.sy,width:44,height:44,opacity:allDim?0.3:1,zIndex:anyHot?34:15}} onClick={(ev)=>{if(drag.current&&drag.current.moved)return;ev.stopPropagation();zoomAt(2.2,cl.sx,cl.sy);}}>{cl.members.length}</button>;
+        })}
+      </div>
+
+      {hover&&(
+        <div className="absolute z-[50] -translate-x-1/2" style={{left:hover.x,top:hover.y+14}}
+          onMouseEnter={()=>{if(hideTimer.current)clearTimeout(hideTimer.current);}} onMouseLeave={()=>setHover(null)} onClick={()=>openMarker(hover.e)}>
+          <div className="bg-white rounded-2xl shadow-2xl border border-slate-100 w-52 p-2.5 cursor-pointer">
+            <div className="rounded-xl overflow-hidden bg-slate-100 aspect-[4/3] mb-2">
+              {hover.e.type==="person"
+                ? <Photo src={hover.e.photo} alt={hover.e.name} initials={initialsOf(hover.e.name)} hue={hueOf(hover.e.name)} className="w-full h-full object-cover text-2xl"/>
+                : <Photo src={hover.e.photo} alt={hover.e.title} initials="EV" hue={210} className="w-full h-full object-cover"/>}
+            </div>
+            <div className="px-1 pb-0.5">
+              <div className="font-semibold text-[14px] leading-snug">{hover.e.type==="person"?hover.e.name:hover.e.title}</div>
+              <div className="text-brand text-[12.5px] leading-snug">{hover.e.type==="person"?hover.e.role:fmtDate(hover.e.date)+" · "+hover.e.time}</div>
+              <div className="text-slate-400 text-[11.5px] flex items-center gap-1 mt-0.5"><Icon.pin size={11}/>{hover.e.city}, {hover.e.country}</div>
+            </div>
+          </div>
+        </div>
+      )}
+      <div className="absolute top-4 right-4 z-30 flex flex-col bg-white rounded-xl shadow-md overflow-hidden">
+        <button className="w-9 h-9 flex items-center justify-center hover:bg-slate-50" onClick={()=>zoomAt(1.4,size.w/2,size.h/2)}><Icon.plus size={18}/></button>
+        <div className="h-px bg-slate-100"/>
+        <button className="w-9 h-9 flex items-center justify-center hover:bg-slate-50" onClick={()=>zoomAt(1/1.4,size.w/2,size.h/2)}><Icon.minus size={18}/></button>
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================ GRIDS ============================================================ */
+function ListView({people,events,filter,onOpen}){
+  return (
+    <div className="h-full overflow-auto nice-scroll">
+      <div className="max-w-[1400px] mx-auto px-5 md:px-8 py-8">
+        {filter.people && (
+          <section className="mb-12">
+            <div className="flex items-baseline gap-3 mb-5"><h2 className="text-xl font-bold">People</h2><span className="text-slate-400 text-[14px]">{people.length}</span></div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-5">{people.length?people.map(p=><EntityCard key={p.id} e={p} onOpen={onOpen}/>):<EmptyState label="nenašli sa žiadni ľudia pre zvolený filter"/>}</div>
+          </section>
+        )}
+        {filter.events && (
+          <section>
+            <div className="flex items-baseline gap-3 mb-5"><h2 className="text-xl font-bold">Events</h2><span className="text-slate-400 text-[14px]">{events.length}</span></div>
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-5">{events.length?events.map(e=><EntityCard key={e.id} e={e} onOpen={onOpen}/>):<EmptyState label="nenašli sa žiadne eventy pre zvolený filter"/>}</div>
+          </section>
+        )}
+        {!filter.people && !filter.events && <div className="grid"><EmptyState label="zapni v filtri aspoň People alebo Events"/></div>}
+      </div>
+    </div>
+  );
+}
+function Pagination({page,pages,onChange}){
+  if(pages<=1)return null;
+  const btn="min-w-9 h-9 px-2 rounded-lg text-[14px] flex items-center justify-center border transition";
+  const nums=[];for(let i=1;i<=pages;i++)nums.push(i);
+  return (
+    <div className="flex items-center justify-center gap-1.5 mt-10 mb-[4.5rem]">
+      <button onClick={()=>onChange(page-1)} disabled={page===1} className={btn+" border-slate-200 text-slate-500 hover:border-slate-300 disabled:opacity-40"}><Icon.back size={16}/></button>
+      {nums.map(n=><button key={n} onClick={()=>onChange(n)} className={btn+" "+(n===page?"bg-brand text-white border-brand font-medium":"border-slate-200 text-slate-600 hover:border-slate-300")}>{n}</button>)}
+      <button onClick={()=>onChange(page+1)} disabled={page===pages} className={btn+" border-slate-200 text-slate-500 hover:border-slate-300 disabled:opacity-40"}><Icon.back size={16} cn="rotate-180"/></button>
+    </div>
+  );
+}
+function PeopleGrid({people,onOpen}){
+  const per=20; const [pg,setPg]=useState(1);
+  useEffect(()=>{setPg(1);},[people]);
+  const pages=Math.max(1,Math.ceil(people.length/per));
+  const cur=Math.min(pg,pages);
+  const slice=people.slice((cur-1)*per,cur*per);
+  return (
+    <div className="h-full overflow-auto nice-scroll">
+      <div className="max-w-[1400px] mx-auto px-5 md:px-8 py-8">
+        <div className="flex items-baseline gap-3 mb-6"><h1 className="text-3xl font-extrabold">People</h1><span className="text-slate-400 text-[15px]">{people.length}</span></div>
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5 gap-5">{slice.length?slice.map(p=><EntityCard key={p.id} e={p} onOpen={onOpen}/>):<EmptyState label="nenašli sa žiadni ľudia pre zvolený filter"/>}</div>
+        <Pagination page={cur} pages={pages} onChange={setPg}/>
+      </div>
+    </div>
+  );
+}
+function EventsPage({events,onOpen}){
+  const [layout,setLayout]=useState("grid");
+  const per=10; const [pg,setPg]=useState(1);
+  useEffect(()=>{setPg(1);},[events]);
+  if(!events.length) return <div className="h-full overflow-auto nice-scroll"><div className="max-w-[1400px] mx-auto px-8 py-8"><h1 className="text-3xl font-extrabold mb-6">Events</h1><div className="grid"><EmptyState label="nenašli sa žiadne eventy pre zvolený filter"/></div></div></div>;
+  const [primary,...rest]=events;
+  const attP=primary.attendees.map(byId).filter(Boolean);
+  const pages=Math.max(1,Math.ceil(rest.length/per));
+  const cur=Math.min(pg,pages);
+  const restSlice=rest.slice((cur-1)*per,cur*per);
+  return (
+    <div className="h-full overflow-auto nice-scroll">
+      <div className="max-w-[1400px] mx-auto px-5 md:px-8 py-8">
+        <h1 className="text-3xl font-extrabold mb-6">Events</h1>
+        <div onClick={()=>onOpen(primary)} className="rounded-3xl border border-slate-100 shadow-sm hover:shadow-md transition grid md:grid-cols-2 gap-1 md:gap-3 mb-10 bg-white p-3 cursor-pointer">
+          <div className="relative rounded-2xl overflow-hidden bg-slate-100 aspect-[4/3] md:aspect-auto md:min-h-[260px]">
+            <Photo src={primary.photo} alt={primary.title} initials="EV" hue={210} className="absolute inset-0 w-full h-full object-cover"/>
+            <span className="absolute top-3 left-3 flex items-center gap-1.5 bg-white/95 text-brand text-[12px] font-semibold px-3 py-1.5 rounded-lg shadow"><Icon.spark size={13}/>Featured</span>
+          </div>
+          <div className="p-4 md:p-6 flex flex-col">
+            <div className="flex items-center gap-2 text-brand text-[13px] font-medium flex-wrap"><Icon.calendar size={15}/>{fmtDate(primary.date)} · {primary.time}<span className="text-slate-300">•</span><Icon.pin size={15}/>{primary.city}<span className="text-slate-300">•</span><Icon.building size={15}/>{primary.company}</div>
+            <h2 className="text-2xl font-bold mt-2 leading-tight">{primary.title}</h2>
+            <p className="text-slate-600 text-[15px] mt-3 leading-relaxed line-clamp-4">{primary.about}</p>
+            <div className="flex flex-wrap gap-2 mt-4">{primary.categories.map(c=><span key={c} className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-brandSoft/50 text-brandDark text-[12px] font-medium">{catIcon(c,12)}{c}</span>)}</div>
+            <div className="flex items-center gap-3 mt-auto pt-5"><div className="flex -space-x-2">{attP.slice(0,5).map(p=><span key={p.id} className="ring-2 ring-white rounded-full"><Avatar person={p} size={32} ring={false}/></span>)}</div><span className="text-slate-400 text-[13px]">{attP.length} attending</span><button onClick={(ev)=>{ev.stopPropagation();onOpen(primary);}} className="ml-auto px-5 py-2.5 rounded-xl bg-brand text-white font-semibold hover:bg-brandDark transition">View Event</button></div>
+          </div>
+        </div>
+        <div className="flex items-center justify-between mb-5">
+          <h3 className="text-lg font-bold">More events <span className="text-slate-400 text-[14px] font-normal">{rest.length}</span></h3>
+          <div className="flex bg-slate-100 rounded-lg p-1"><button onClick={()=>setLayout("grid")} className={"w-9 h-8 flex items-center justify-center rounded-md "+(layout==="grid"?"bg-white shadow text-brand":"text-slate-400")}><Icon.grid size={17}/></button><button onClick={()=>setLayout("stack")} className={"w-9 h-8 flex items-center justify-center rounded-md "+(layout==="stack"?"bg-white shadow text-brand":"text-slate-400")}><Icon.rows size={17}/></button></div>
+        </div>
+        {layout==="grid"
+          ? <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">{restSlice.map(e=><EntityCard key={e.id} e={e} onOpen={onOpen}/>)}</div>
+          : <div className="space-y-4">{restSlice.map(e=>{const att=e.attendees.map(byId).filter(Boolean);return (
+              <button key={e.id} onClick={()=>onOpen(e)} className="w-full flex flex-col sm:flex-row gap-4 bg-white rounded-2xl border border-slate-100 shadow-sm hover:shadow-md transition p-3 text-left">
+                <div className="sm:w-56 h-36 sm:h-auto rounded-xl overflow-hidden bg-slate-100 flex-shrink-0"><Photo src={e.photo} alt={e.title} initials="EV" hue={210} className="w-full h-full object-cover"/></div>
+                <div className="flex-1 py-1 pr-2"><div className="flex items-center gap-2 text-brand text-[13px] font-medium flex-wrap"><Icon.calendar size={14}/>{fmtDate(e.date)} · {e.time}<span className="text-slate-300">•</span><Icon.pin size={14}/>{e.city}<span className="text-slate-300">•</span><Icon.building size={14}/>{e.company}</div><div className="text-[17px] font-bold mt-1">{e.title}</div><p className="text-slate-500 text-[14px] mt-1.5 line-clamp-2">{e.about}</p><div className="flex items-center gap-2 mt-3"><div className="flex -space-x-2">{att.slice(0,4).map(p=><span key={p.id} className="ring-2 ring-white rounded-full"><Avatar person={p} size={26} ring={false}/></span>)}</div><span className="text-slate-400 text-[12px]">{att.length} attending</span></div></div>
+              </button>);})}</div>}
+        <Pagination page={cur} pages={pages} onChange={setPg}/>
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================ DETAIL ============================================================ */
+function Section({title,children}){return <div className="mt-8"><h3 className="text-[12px] font-semibold uppercase tracking-wider text-slate-400 mb-3">{title}</h3>{children}</div>;}
+function PersonDetail({p}){
+  return (
+    <div className="p-7 md:p-8 pt-10">
+      <div className="flex items-stretch gap-5">
+        <div className="w-28 md:w-36 rounded-2xl overflow-hidden bg-slate-100 flex-shrink-0"><Photo src={p.photo} alt={p.name} initials={initialsOf(p.name)} hue={hueOf(p.name)} className="w-full h-full object-cover text-3xl"/></div>
+        <div className="pr-8 min-w-0 flex flex-col justify-center py-0.5">
+          <h2 className="text-2xl font-bold leading-tight">{p.name}</h2>
+          <div className="text-slate-400 text-[13px] flex items-center gap-1 mt-1"><Icon.pin size={14}/>{p.city}, {p.country}</div>
+          <div className="text-brand text-[15px] font-medium mt-2">{p.role}</div>
+          <div className="text-slate-500 text-[14px] flex items-center gap-1.5 mt-1"><Icon.building size={14}/>{p.company}</div>
+          <div className="flex gap-2 mt-4">{["linkedin","github","twitter"].map(s=><a key={s} href={p.social[s]} className="w-9 h-9 rounded-lg bg-slate-100 hover:bg-brand hover:text-white text-slate-500 flex items-center justify-center transition">{Icon[s]({size:18})}</a>)}</div>
+        </div>
+      </div>
+      <button title="Prototype — non-functional" className="mt-6 w-full py-3 rounded-xl bg-brand text-white font-semibold hover:bg-brandDark transition">Contact</button>
+      <Section title="About"><p className="text-[15px] leading-relaxed text-slate-600">{p.about}</p></Section>
+      <Section title="Focus areas"><div className="flex flex-wrap gap-2">{p.categories.map(c=><span key={c} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-brandSoft/50 text-brandDark text-[13px] font-medium">{catIcon(c,14)}{c}</span>)}</div></Section>
+      <Section title="Experience"><div className="space-y-4">{p.experience.map((x,i)=><div key={i} className="flex gap-3"><div className="w-9 h-9 rounded-lg bg-slate-100 flex items-center justify-center text-slate-500 flex-shrink-0 font-semibold text-[13px]">{x.c[0]}</div><div><div className="font-medium text-[15px] leading-tight">{x.r}</div><div className="text-slate-500 text-[13px]">{x.c}</div><div className="text-slate-400 text-[12px] mt-0.5">{x.p}</div></div></div>)}</div></Section>
+      <Section title="Education"><div className="space-y-3">{p.education.map((x,i)=><div key={i}><div className="font-medium text-[15px] leading-tight">{x.s}</div><div className="text-slate-500 text-[13px]">{x.d}</div></div>)}</div></Section>
+      <Section title="Skills"><div className="flex flex-wrap gap-2">{p.skills.map(s=><span key={s} className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-600 text-[13px]">{s}</span>)}</div></Section>
+    </div>
+  );
+}
+function EventDetail({e,onOpen}){
+  const attendees=e.attendees.map(byId).filter(Boolean);
+  return (
+    <div className="pb-2">
+      <div className="h-56 md:h-[330px] bg-slate-100 relative"><Photo src={e.photo} alt={e.title} initials="EV" hue={210} className="w-full h-full object-cover"/></div>
+      <div className="p-7 md:p-8 pt-6">
+        <h2 className="text-2xl font-bold leading-tight pr-8">{e.title}</h2>
+        <div className="flex flex-wrap gap-x-5 gap-y-1 mt-3 text-slate-500 text-[14px]">
+          <span className="flex items-center gap-1.5 text-brand"><Icon.calendar size={15}/>{fmtDate(e.date)} · {e.time}</span>
+          <span className="flex items-center gap-1.5"><Icon.pin size={15}/>{e.city}, {e.country}</span>
+          <span className="flex items-center gap-1.5"><Icon.building size={15}/>{e.company}</span>
+        </div>
+        <button title="Prototype — non-functional" className="mt-5 w-full py-3 rounded-xl bg-brand text-white font-semibold hover:bg-brandDark transition">Prihlásiť sa</button>
+        <Section title="About the event"><p className="text-[15px] leading-relaxed text-slate-600">{e.about}</p></Section>
+        <Section title="Categories"><div className="flex flex-wrap gap-2">{e.categories.map(c=><span key={c} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-brandSoft/50 text-brandDark text-[13px] font-medium">{catIcon(c,14)}{c}</span>)}</div></Section>
+        <Section title={`Who's attending (${attendees.length})`}><div className="grid grid-cols-2 gap-3">{attendees.map(p=><button key={p.id} onClick={()=>onOpen(p)} className="flex items-center gap-3 p-2 rounded-xl hover:bg-slate-50 text-left transition"><Avatar person={p} size={42}/><div className="min-w-0"><div className="font-medium text-[14px] truncate">{p.name}</div><div className="text-brand text-[12px] truncate">{p.role}</div></div></button>)}</div></Section>
+      </div>
+    </div>
+  );
+}
+function RecommendedBox({entity,onOpen}){
+  const recs=recommend(entity);
+  const title=entity.type==="person"?"Ďalší odborníci v tomto obore":"Other events";
+  return (
+    <div className="mt-8 px-1">
+      <h3 className="text-[13px] font-semibold uppercase tracking-wider text-slate-400 mb-4">{title}</h3>
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">{recs.map(r=><EntityCard key={r.id} e={r} onOpen={onOpen}/>)}</div>
+    </div>
+  );
+}
+function DetailBody({entity,onOpen}){
+  return entity.type==="person"?<PersonDetail p={entity}/>:<EventDetail e={entity} onOpen={onOpen}/>;
+}
+/* Map context: right sidebar — floating close/back over content (no header band, no recommendations) */
+function Sidebar({stack,onBack,onClose,onOpen}){
+  if(!stack||!stack.length)return null;
+  const entity=stack[stack.length-1];
+  return (
+    <>
+      <aside className="absolute top-0 right-0 z-[56] h-full w-full sm:max-w-[520px] bg-white shadow-2xl slide-in-r overflow-hidden">
+        <div className="absolute inset-0 overflow-y-auto nice-scroll"><DetailBody entity={entity} onOpen={onOpen}/></div>
+        {stack.length>1 && <button onClick={onBack} className="absolute top-4 left-4 z-10 flex items-center gap-1 text-[13px] font-medium text-slate-700 bg-white/85 backdrop-blur px-3 py-1.5 rounded-full shadow-sm hover:text-ink"><Icon.back size={16}/>Späť</button>}
+        <button onClick={onClose} className="absolute top-4 right-4 z-10 w-9 h-9 rounded-full bg-white/85 backdrop-blur shadow-sm flex items-center justify-center text-slate-500 hover:text-slate-900"><Icon.x size={20}/></button>
+      </aside>
+    </>
+  );
+}
+/* Page context: full-area detail (3rd level) — separate recommendations box below */
+function PageDetail({stack,onBack,onOpen}){
+  const entity=stack[stack.length-1];
+  return (
+    <div className="h-full overflow-auto nice-scroll">
+      <div className="max-w-[760px] mx-auto px-3 md:px-5 py-5">
+        <button onClick={onBack} className="flex items-center gap-1.5 text-[14px] text-slate-500 hover:text-ink px-3 py-2 rounded-lg hover:bg-slate-100 mb-2"><Icon.back size={18}/>{stack.length>1?"Späť":"Späť na zoznam"}</button>
+        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden"><DetailBody entity={entity} onOpen={onOpen}/></div>
+        <RecommendedBox entity={entity} onOpen={onOpen}/>
+      </div>
+    </div>
+  );
+}
+
+/* ============================================================ AI ASSISTANT (right) ============================================================ */
+const SUGGESTIONS=["Kto sa hodí na Machine Learning?","Nájdi expertov na Computer Vision","Aké AI eventy sú v Európe?","Kto pracuje v Google?"];
+function runAssistant(query){
+  const q=query.toLowerCase();
+  const kw=[["machine learning","ml"],["computer vision","vision","cv","obraz"],["natural language","nlp","jazyk","language"],["data analysis","data","dáta","dat"],["planning","reasoning","plán"],["prediction","optim","predik"],["trustworthy","safety","bezpeč","fair"],["general intelligence","agi"],["applications","aplik"],["environment","klíma","climate","prostred"],["infrastructure","infra"],["robot"],["business","biznis","firm"],["cognitive","kognit"],["complex","komplex"]];
+  let cat=null;for(let i=0;i<CATEGORIES.length;i++){if(kw[i].some(k=>q.includes(k))){cat=CATEGORIES[i];break;}}
+  let company=null;for(const c of ALL_COMPANIES){if(q.includes(c.toLowerCase())){company=c;break;}}
+  let city=null;for(const c of Object.keys(CITIES)){if(q.includes(c.toLowerCase())){city=c;break;}}
+  const wantsEvents=/event|eventy|podujat|konferenc|meetup|summit|workshop/.test(q);
+  const inEurope=/európ|europe/.test(q);
+  if(wantsEvents){
+    let ev=EVENTS.slice();if(cat)ev=ev.filter(e=>e.categories.includes(cat));if(city)ev=ev.filter(e=>e.city===city);if(company)ev=ev.filter(e=>e.company===company);if(inEurope)ev=ev.filter(e=>e.continent==="Europe");
+    return {intro:ev.length?`Našiel som ${ev.length} ${ev.length===1?"event":"eventov"}${cat?" so zameraním "+cat:""}${inEurope?" v Európe":""}${city?" v "+city:""}. Zvýraznil som ich na mape:`:"Pre túto požiadavku som nenašiel žiadne eventy.",items:ev};
+  }
+  let ppl=PEOPLE.slice();if(cat)ppl=ppl.filter(p=>p.categories.includes(cat));if(company)ppl=ppl.filter(p=>p.company===company);if(city)ppl=ppl.filter(p=>p.city===city);if(inEurope)ppl=ppl.filter(p=>p.continent==="Europe");ppl=ppl.slice(0,8);
+  if(!cat&&!company&&!city)return{intro:"Skús sa spýtať na konkrétne zameranie (napr. Machine Learning), firmu (napr. Google), mesto, alebo na eventy. Tu je pár ľudí z komunity:",items:PEOPLE.slice(0,5)};
+  const parts=[];if(cat)parts.push("so zameraním "+cat);if(company)parts.push("z "+company);if(city)parts.push("v "+city);if(inEurope)parts.push("v Európe");
+  return {intro:ppl.length?`Našiel som ${ppl.length} ${ppl.length===1?"človeka":"ľudí"} ${parts.join(", ")}. Zvýraznil som ich na mape:`:`Nenašiel som nikoho ${parts.join(", ")}.`,items:ppl};
+}
+function ChatPanel({onClose,onOpenEntity,onHighlight,toMap}){
+  const [msgs,setMsgs]=useState([{role:"ai",text:"Ahoj! 👋 Som AI asistent slovaks.ai. Pomôžem ti nájsť odborníkov alebo eventy. Na čom pracuješ?"}]);
+  const [input,setInput]=useState("");const [thinking,setThinking]=useState(false);const scroller=useRef(null);
+  useEffect(()=>{if(scroller.current)scroller.current.scrollTop=scroller.current.scrollHeight;},[msgs,thinking]);
+  const ask=(text)=>{if(!text.trim()||thinking)return;setMsgs(m=>[...m,{role:"user",text}]);setInput("");setThinking(true);setTimeout(()=>{const res=runAssistant(text);setThinking(false);setMsgs(m=>[...m,{role:"ai",text:res.intro,items:res.items}]);if(res.items&&res.items.length){onHighlight(res.items.map(x=>x.id));toMap();}},1200);};
+  return (
+    <div className="fixed inset-0 z-[60] md:static md:z-auto md:h-full md:w-[22%] md:min-w-[320px] md:max-w-[420px] bg-white md:border-l border-slate-200 flex flex-col shadow-xl md:shadow-none">
+      <div className="flex items-center gap-2.5 px-4 py-3.5 border-b border-slate-100 flex-shrink-0"><span className="w-9 h-9 rounded-full bg-brand text-white flex items-center justify-center"><Icon.spark size={19}/></span><div className="flex-1"><div className="font-semibold text-[15px] leading-tight">AI asistent</div><div className="text-[12px] text-emerald-500 flex items-center gap-1"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500"/>online</div></div><button onClick={onClose} className="text-slate-400 hover:text-slate-700"><Icon.x size={20}/></button></div>
+      <div ref={scroller} className="flex-1 overflow-y-auto nice-scroll px-4 py-4 space-y-3">
+        {msgs.map((m,i)=>(
+          <div key={i} className={m.role==="user"?"flex justify-end":"flex justify-start"}><div className={"max-w-[88%] "+(m.role==="user"?"":"w-full")}>
+            <div className={"px-3.5 py-2.5 rounded-2xl text-[14px] leading-relaxed "+(m.role==="user"?"bg-brand text-white rounded-br-sm":"bg-slate-100 text-slate-700 rounded-bl-sm")}>{m.text}</div>
+            {m.items&&m.items.length>0&&<div className="mt-2 space-y-1.5">{m.items.map(it=><MiniRow key={it.id} e={it} onOpen={onOpenEntity}/>)}</div>}
+          </div></div>
+        ))}
+        {thinking&&<div className="flex justify-start"><div className="bg-slate-100 rounded-2xl rounded-bl-sm px-4 py-3 flex items-center gap-1.5"><span className="text-[13px] text-slate-400 mr-1">Rozmýšľam</span><span className="w-1.5 h-1.5 rounded-full bg-slate-400 dot"/><span className="w-1.5 h-1.5 rounded-full bg-slate-400 dot" style={{animationDelay:".2s"}}/><span className="w-1.5 h-1.5 rounded-full bg-slate-400 dot" style={{animationDelay:".4s"}}/></div></div>}
+      </div>
+      {msgs.length<=1&&<div className="px-4 pb-2 flex flex-wrap gap-2">{SUGGESTIONS.map(s=><button key={s} onClick={()=>ask(s)} className="px-3 py-1.5 rounded-full border border-slate-200 text-[12.5px] text-slate-600 hover:border-brand hover:text-brand transition">{s}</button>)}</div>}
+      <div className="p-3 border-t border-slate-100 flex items-center gap-2 flex-shrink-0"><input value={input} onChange={e=>setInput(e.target.value)} onKeyDown={e=>{if(e.key==="Enter")ask(input);}} placeholder="Napíš správu…" className="flex-1 px-3.5 py-2.5 rounded-xl bg-slate-100 text-[14px] outline-none focus:ring-2 focus:ring-brand/30"/><button onClick={()=>ask(input)} disabled={!input.trim()||thinking} className="w-10 h-10 rounded-xl bg-brand text-white flex items-center justify-center hover:bg-brandDark disabled:opacity-40 transition"><Icon.send size={18}/></button></div>
+    </div>
+  );
+}
+
+/* ============================================================ ABOUT ============================================================ */
+function PartnerLogo({children}){return <div className="flex items-center justify-center h-12 text-2xl font-bold text-slate-700">{children}</div>;}
+function AboutPage({go}){
+  return (
+    <div className="overflow-y-auto nice-scroll h-full">
+      <div className="max-w-[1200px] mx-auto px-6 md:px-8 py-12 md:py-14">
+        <h1 className="text-4xl font-extrabold mb-8">About us</h1>
+        <div className="grid md:grid-cols-2 gap-x-16 gap-y-6 text-slate-600 text-[16px] leading-relaxed">
+          <div className="space-y-5">
+            <p>slovaks.ai is a platform that connects Slovak professionals working in artificial intelligence around the world.</p>
+            <p>The slovaks.ai map provides an overview of Slovak expertise in AI, across research, academia, industry, and applied sectors, and serves as a tool for networking, collaboration, and knowledge exchange.</p>
+            <p>The map includes Slovaks studying or working in AI-related fields abroad, with the goal of strengthening ties across the global Slovak AI community.</p>
+            <div className="flex gap-1 pt-3 flex-wrap">{Array.from({length:14}).map((_,i)=><span key={i} style={{color:i%2?"#A4D3F8":"#2196F3"}} className="text-3xl">●</span>)}</div>
+            <div className="border-t border-slate-200 pt-4"><span className="text-5xl font-extrabold text-ink">{PEOPLE.length}</span> <span className="text-slate-500">AI professionals</span></div>
+          </div>
+          <div className="space-y-5">
+            <p>We believe that stronger connections and collaborations among experts can generate real synergies, driving innovation and contributing to the global visibility and competitiveness of Slovakia.</p>
+            <p>Whether you're a Slovak working in AI abroad, a researcher in Slovakia, or someone looking for expert collaboration, slovaks.ai is here to help you connect.</p>
+            <button className="w-full py-3.5 rounded-xl bg-brand text-white font-semibold hover:bg-brandDark transition mt-2">Contact Us</button>
+          </div>
+        </div>
+        <div className="mt-16 rounded-2xl bg-navy overflow-hidden grid md:grid-cols-2">
+          <div className="p-10 md:p-12 text-white"><h2 className="text-3xl font-bold leading-tight">See the experts<br/>on the map</h2><p className="text-slate-300 mt-4 text-[15px]">The map brings together Slovaks living/studying abroad in the field of AI.</p><button onClick={()=>go("app")} className="mt-6 px-6 py-3 rounded-lg bg-brand text-white font-medium hover:bg-brandDark transition">Visit Map</button></div>
+          <div className="bg-gradient-to-br from-slate-700 to-slate-900 min-h-[200px] flex items-center justify-center text-slate-400"><Icon.map size={64}/></div>
+        </div>
+        <div className="mt-16 grid grid-cols-2 md:grid-cols-4 gap-8 text-center">{[["20","different countries"],["79","professionals in commerce"],["30","professionals in research"],["34","professionals in universities"]].map(([n,l])=><div key={l}><div className="text-5xl font-extrabold text-ink">{n}</div><div className="text-slate-500 mt-2 text-[15px]">{l}</div></div>)}</div>
+        <div className="mt-16 py-10 border-y border-slate-100 grid grid-cols-2 md:grid-cols-4 gap-8 items-center"><PartnerLogo>KInIT</PartnerLogo><PartnerLogo>wezeo</PartnerLogo><PartnerLogo>◍ LEAF</PartnerLogo><PartnerLogo><span className="text-[#4285F4]">G</span><span className="text-[#EA4335]">o</span><span className="text-[#FBBC05]">o</span><span className="text-[#4285F4]">g</span><span className="text-[#34A853]">l</span><span className="text-[#EA4335]">e</span></PartnerLogo></div>
+      </div>
+      <footer className="bg-[#0d0f14] text-slate-400"><div className="max-w-[1200px] mx-auto px-8 py-8 flex flex-wrap items-center justify-between gap-4"><Logo dark/><div className="flex gap-8 text-[14px]"><button onClick={()=>go("app")} className="hover:text-white">Home</button><button onClick={()=>go("people")} className="hover:text-white">People</button><button onClick={()=>go("events")} className="hover:text-white">Events</button></div><div className="text-[13px]">© 2025 Copyright. Všetky práva vyhradené.</div></div></footer>
+    </div>
+  );
+}
+
+/* ============================================================ REGISTER / ONBOARDING ============================================================ */
+function completeness(a){
+  if(!a)return 0;
+  const checks=[!!a.photo,!!a.title,!!a.company,(a.focus&&a.focus.length>0),(a.exp&&a.exp.some(e=>e.r||e.c)),(a.skills&&a.skills.some(s=>s&&(""+s).trim())),(a.socials&&a.socials.some(s=>s.url)),!!a.city,!!a.headline];
+  return Math.round(checks.filter(Boolean).length/checks.length*100);
+}
+function AuthAvatar({auth,size=32}){
+  const nm=((auth.firstName||"")+" "+(auth.lastName||"")).trim()||"U";
+  const isExpert=auth.role==="expert";
+  const b=Math.round(size*0.46);
+  return (
+    <span className="relative inline-block flex-shrink-0" style={{width:size,height:size}}>
+      <Photo src={auth.photo} alt={nm} initials={initialsOf(nm)} hue={hueOf(nm)} className={"rounded-full object-cover w-full h-full "+(isExpert?"ring-2 ring-brand":"")} style={{fontSize:size*0.4}}/>
+      {isExpert && <span className="absolute -bottom-1 -right-1 rounded-full bg-brand text-white flex items-center justify-center ring-2 ring-white" style={{width:b,height:b}} title="AI odborník"><Icon.spark size={Math.round(b*0.62)}/></span>}
+    </span>
+  );
+}
+function AuthMenu({auth,onProfile,onLogout}){
+  const [open,setOpen]=useState(false); const ref=useRef(null);
+  useEffect(()=>{const h=(e)=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false);};document.addEventListener("mousedown",h);return()=>document.removeEventListener("mousedown",h);},[]);
+  const expert=auth.role==="expert";
+  return (
+    <div className="relative" ref={ref}>
+      <button onClick={()=>setOpen(o=>!o)} className="flex items-center gap-2 pl-1 pr-2.5 py-1 rounded-full border border-slate-200 hover:bg-slate-50 transition">
+        <AuthAvatar auth={auth} size={30}/>
+        <span className="font-medium text-[14px]">{auth.firstName} {auth.lastName}</span>
+        {expert && <span className="hidden lg:inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-brandSoft/60 text-brandDark text-[11px] font-semibold"><Icon.spark size={11}/>AI odborník</span>}
+        <Icon.chevron size={15} cn="text-slate-400"/>
+      </button>
+      {open && (
+        <div className="absolute right-0 top-full mt-2 w-64 bg-white rounded-2xl shadow-xl border border-slate-100 p-1.5 z-50 fade-in">
+          <div className="px-3 py-2.5 flex items-center gap-3 border-b border-slate-100 mb-1.5">
+            <AuthAvatar auth={auth} size={40}/>
+            <div className="min-w-0"><div className="font-semibold text-[14px] truncate">{auth.firstName} {auth.lastName}</div><div className="text-[12px] text-slate-400 truncate">{auth.email}</div>{expert&&<span className="inline-flex items-center gap-1 mt-1 px-2 py-0.5 rounded-full bg-brandSoft/60 text-brandDark text-[10.5px] font-semibold"><Icon.spark size={10}/>AI odborník</span>}</div>
+          </div>
+          {expert && <button onClick={()=>{setOpen(false);onProfile();}} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left text-[14px] hover:bg-slate-50 text-slate-700"><Icon.users size={16} cn="text-slate-400"/>Upraviť profil</button>}
+          <button onClick={()=>{setOpen(false);onLogout();}} className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-left text-[14px] text-red-500 hover:bg-red-50"><Icon.x size={16}/>Odhlásiť sa</button>
+        </div>
+      )}
+    </div>
+  );
+}
+const EXPERT_STEPS=["Voľba","Účet","Profil","Schválenie"];
+const MEMBER_STEPS=["Voľba","Účet"];
+function Stepper({steps,current,onStep}){
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      {steps.map((s,i)=>{const n=i+1;const active=n===current;const doneStep=n<current;return (
+        <React.Fragment key={s}>
+          <button type="button" onClick={()=>onStep&&onStep(n)} className={"flex items-center gap-2 rounded-full "+(onStep?"cursor-pointer hover:opacity-70 transition":"cursor-default")}>
+            <span className={"w-6 h-6 rounded-full flex items-center justify-center text-[12px] font-semibold "+((doneStep||active)?"bg-brand text-white":"bg-slate-200 text-slate-500")}>{doneStep?<Icon.check size={13} sw={3}/>:n}</span>
+            <span className={"text-[13px] "+(active?"font-semibold text-ink":"text-slate-400")}>{s}</span>
+          </button>
+          {i<steps.length-1 && <div className="w-5 h-px bg-slate-200 mx-0.5"/>}
+        </React.Fragment>
+      );})}
+    </div>
+  );
+}
+
+/* Module-level form helpers (defined OUTSIDE page components so inputs keep focus on re-render) */
+const FLabel=({children})=><label className="block text-[13px] font-medium text-slate-600 mb-1.5">{children}</label>;
+function FSec({title,sub,children}){
+  return (
+    <div className="px-6 md:px-8 py-6 border-t border-slate-100">
+      <h3 className="text-[17px] font-bold">{title}</h3>{sub&&<p className="text-slate-400 text-[13px] mt-0.5">{sub}</p>}
+      <div className="space-y-4 mt-4">{children}</div>
+    </div>
+  );
+}
+
+/* Step 0+1 — choose intent, then create account */
+function SignupPage({onSignup,go,toLogin}){
+  const [sub,setSub]=useState("role"); const [role,setRole]=useState(null);
+  const [first,setFirst]=useState(""); const [last,setLast]=useState("");
+  const [email,setEmail]=useState(""); const [pw,setPw]=useState(""); const [showPw,setShowPw]=useState(false);
+  const inp="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-[14px] outline-none focus:ring-2 focus:ring-brand/30 bg-white";
+  const steps = role==="member"?MEMBER_STEPS:EXPERT_STEPS;
+  const valid = first.trim() && last.trim() && /@/.test(email) && pw.length>=6;
+  const chooseRole=(r)=>{ setRole(r); setSub("account"); };
+  const demoSocial=()=>onSignup({firstName:"Ján",lastName:"Novák",email:"jan.novak@example.com",role:role||"expert"});
+  return (
+    <div className="h-full overflow-auto nice-scroll bg-slate-50">
+      <div className="max-w-[520px] mx-auto px-4 py-8 md:py-12">
+        <button onClick={()=> sub==="account"?setSub("role"):go("app")} className="flex items-center gap-1.5 text-[14px] text-slate-500 hover:text-ink px-2 py-1.5 rounded-lg hover:bg-slate-100 mb-3"><Icon.back size={18}/>Späť</button>
+        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-7 md:p-8">
+          <Stepper steps={steps} current={sub==="role"?1:2} onStep={(n)=>{ if(n===1)setSub("role"); else if(n===2&&role)setSub("account"); }}/>
+          {sub==="role" ? (
+            <>
+              <h1 className="text-2xl font-extrabold mt-5">Ako sa chceš pridať?</h1>
+              <p className="text-slate-500 text-[14px] mt-1">Vyber si, akou formou sa zapojíš do slovaks.ai.</p>
+              <div className="mt-6 space-y-3">
+                <button onClick={()=>chooseRole("member")} className="w-full text-left p-5 rounded-2xl border border-slate-200 hover:border-brand hover:bg-brandSoft/10 transition flex items-start gap-4">
+                  <span className="w-11 h-11 rounded-xl bg-brandSoft/50 text-brand flex items-center justify-center flex-shrink-0"><Icon.users size={22}/></span>
+                  <span><span className="block font-semibold text-[16px]">Chcem byť súčasťou komunity</span><span className="block text-slate-500 text-[13.5px] mt-0.5">Stačí e-mail a meno. Sleduj dianie, eventy a odborníkov — bez vypĺňania profilu.</span></span>
+                </button>
+                <button onClick={()=>chooseRole("expert")} className="w-full text-left p-5 rounded-2xl border border-slate-200 hover:border-brand hover:bg-brandSoft/10 transition flex items-start gap-4">
+                  <span className="w-11 h-11 rounded-xl bg-brandSoft/50 text-brand flex items-center justify-center flex-shrink-0"><Icon.spark size={22}/></span>
+                  <span><span className="block font-semibold text-[16px]">Som AI odborník</span><span className="block text-slate-500 text-[13.5px] mt-0.5">Vytvor si profil (pozícia, skúsenosti, zameranie…) a po schválení sa zobrazíš na mape.</span></span>
+                </button>
+              </div>
+              <p className="text-[13px] text-slate-500 text-center mt-6">Máš už účet? <button onClick={toLogin} className="text-brand font-medium hover:underline">Prihlás sa</button></p>
+            </>
+          ) : (
+            <>
+              <h1 className="text-2xl font-extrabold mt-5">Vytvor si účet</h1>
+              <p className="text-slate-500 text-[14px] mt-1">{role==="member"?"Stačí e-mail a meno.":"Stačí pár údajov — profil doplníš v ďalšom kroku."}</p>
+              <div className="mt-6">
+                <button onClick={demoSocial} className="w-full flex items-center justify-center gap-2.5 py-2.5 rounded-xl border border-slate-200 font-medium text-[14px] hover:bg-slate-50"><span className="font-bold text-[15px]"><span className="text-[#4285F4]">G</span><span className="text-[#EA4335]">o</span><span className="text-[#FBBC05]">o</span><span className="text-[#4285F4]">g</span><span className="text-[#34A853]">l</span><span className="text-[#EA4335]">e</span></span>Pokračovať cez Google</button>
+              </div>
+              <div className="flex items-center gap-3 my-5"><div className="h-px bg-slate-200 flex-1"/><span className="text-[12px] text-slate-400">alebo e-mailom</span><div className="h-px bg-slate-200 flex-1"/></div>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <div><FLabel>Meno</FLabel><input value={first} onChange={e=>setFirst(e.target.value)} placeholder="Ján" className={inp}/></div>
+                  <div><FLabel>Priezvisko</FLabel><input value={last} onChange={e=>setLast(e.target.value)} placeholder="Novák" className={inp}/></div>
+                </div>
+                <div><FLabel>E-mail</FLabel><input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="jan@example.com" className={inp}/></div>
+                <div><FLabel>Heslo</FLabel><div className="relative"><input type={showPw?"text":"password"} value={pw} onChange={e=>setPw(e.target.value)} placeholder="Aspoň 6 znakov" className={inp+" pr-16"}/><button onClick={()=>setShowPw(s=>!s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[13px] text-slate-400 hover:text-slate-600">{showPw?"Skryť":"Zobraziť"}</button></div></div>
+              </div>
+              <button onClick={()=>{if(valid)onSignup({firstName:first,lastName:last,email,role});}} disabled={!valid} className="mt-6 w-full py-3 rounded-xl bg-brand text-white font-semibold hover:bg-brandDark disabled:opacity-40 transition">{role==="member"?"Vytvoriť účet":"Pokračovať na profil"}</button>
+              <button onClick={()=>{setFirst("Ján");setLast("Novák");setEmail("jan.novak@example.com");setPw("demo123");}} className="mt-3 w-full text-[13px] text-slate-400 hover:text-slate-600">Vyplniť ukážkovými údajmi (demo)</button>
+              <p className="text-[12px] text-slate-400 text-center mt-4">Registráciou súhlasíš s podmienkami a zásadami ochrany súkromia.</p>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* Sign in */
+function LoginPage({onLogin,go,toRegister}){
+  const [email,setEmail]=useState(""); const [pw,setPw]=useState(""); const [showPw,setShowPw]=useState(false);
+  const inp="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-[14px] outline-none focus:ring-2 focus:ring-brand/30 bg-white";
+  const valid=/@/.test(email)&&pw.length>=1;
+  return (
+    <div className="h-full overflow-auto nice-scroll bg-slate-50">
+      <div className="max-w-[440px] mx-auto px-4 py-10 md:py-16">
+        <button onClick={()=>go("app")} className="flex items-center gap-1.5 text-[14px] text-slate-500 hover:text-ink px-2 py-1.5 rounded-lg hover:bg-slate-100 mb-3"><Icon.back size={18}/>Späť</button>
+        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-7 md:p-8">
+          <h1 className="text-2xl font-extrabold">Prihlásiť sa</h1>
+          <p className="text-slate-500 text-[14px] mt-1">Vitaj späť!</p>
+          <div className="mt-6">
+            <button onClick={onLogin} className="w-full flex items-center justify-center gap-2.5 py-2.5 rounded-xl border border-slate-200 font-medium text-[14px] hover:bg-slate-50"><span className="font-bold text-[15px]"><span className="text-[#4285F4]">G</span><span className="text-[#EA4335]">o</span><span className="text-[#FBBC05]">o</span><span className="text-[#4285F4]">g</span><span className="text-[#34A853]">l</span><span className="text-[#EA4335]">e</span></span>Prihlásiť sa cez Google</button>
+          </div>
+          <div className="flex items-center gap-3 my-5"><div className="h-px bg-slate-200 flex-1"/><span className="text-[12px] text-slate-400">alebo e-mailom</span><div className="h-px bg-slate-200 flex-1"/></div>
+          <div className="space-y-4">
+            <div><FLabel>E-mail</FLabel><input type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="jan@example.com" className={inp}/></div>
+            <div><FLabel>Heslo</FLabel><div className="relative"><input type={showPw?"text":"password"} value={pw} onChange={e=>setPw(e.target.value)} placeholder="Heslo" className={inp+" pr-16"}/><button onClick={()=>setShowPw(s=>!s)} className="absolute right-3 top-1/2 -translate-y-1/2 text-[13px] text-slate-400 hover:text-slate-600">{showPw?"Skryť":"Zobraziť"}</button></div></div>
+          </div>
+          <button onClick={()=>{if(valid)onLogin();}} disabled={!valid} className="mt-6 w-full py-3 rounded-xl bg-brand text-white font-semibold hover:bg-brandDark disabled:opacity-40 transition">Prihlásiť sa</button>
+          <p className="text-[13px] text-slate-500 text-center mt-4">Nemáš účet? <button onClick={toRegister} className="text-brand font-medium hover:underline">Registruj sa</button></p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* Step 4 — approval request (submitted AFTER profile; company confirms within 24h) */
+function PendingPage({auth,go,onApprove}){
+  const approved=auth.status==="approved";
+  return (
+    <div className="h-full overflow-auto nice-scroll bg-slate-50">
+      <div className="max-w-[520px] mx-auto px-4 py-10 md:py-16">
+        <button onClick={()=>go("app")} className="flex items-center gap-1.5 text-[14px] text-slate-500 hover:text-ink px-2 py-1.5 rounded-lg hover:bg-slate-100 mb-3"><Icon.back size={18}/>Späť na mapu</button>
+        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-8 text-center">
+          <div className="flex justify-center"><Stepper steps={EXPERT_STEPS} current={4}/></div>
+          {!approved ? (
+            <div className="mt-8">
+              <div className="mx-auto w-16 h-16 rounded-full bg-amber-50 text-amber-500 flex items-center justify-center mb-5"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></div>
+              <h1 className="text-2xl font-extrabold">Žiadosť evidujeme</h1>
+              <p className="text-slate-500 mt-2 text-[15px]">Ďakujeme, {auth.firstName}. Tvoju žiadosť o zaradenie na mapu sme prijali a <b>potvrdíme ti ju do 24 hodín</b> e-mailom. Medzitým môžeš pokojne prezerať mapu a eventy.</p>
+              <button onClick={()=>go("app")} className="mt-7 w-full py-3 rounded-xl bg-brand text-white font-semibold hover:bg-brandDark transition">Prejsť na mapu</button>
+              <button onClick={onApprove} title="Demo — simulácia schválenia zo strany platformy" className="mt-6 text-[11px] text-slate-300 hover:text-slate-400">· simulovať schválenie (demo) ·</button>
+            </div>
+          ) : (
+            <div className="mt-8">
+              <div className="mx-auto w-16 h-16 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center mb-5"><Icon.check size={34} sw={2.5}/></div>
+              <h1 className="text-2xl font-extrabold">Žiadosť bola schválená</h1>
+              <p className="text-slate-500 mt-2 text-[15px]">Vitaj v komunite, {auth.firstName}. Tvoj profil je teraz viditeľný na mape.</p>
+              <button onClick={()=>go("profile-edit")} className="mt-7 w-full py-3 rounded-xl bg-brand text-white font-semibold hover:bg-brandDark transition">Upraviť profil</button>
+              <button onClick={()=>go("app")} className="mt-3 w-full text-[13px] text-slate-400 hover:text-slate-600">Prejsť na mapu</button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* Step 3 — complete / edit profile (progressive profiling) */
+function ProfileEditPage({auth,onSave,go,onLogout}){
+  const EMPLOYMENT=["Full-time","Part-time","Freelance","Self-employed","Internship","Contract"];
+  const NETWORKS=["LinkedIn","X","Instagram","Facebook","Reddit","Iné"];
+  const [photo,setPhoto]=useState(auth.photo||null);
+  const [first,setFirst]=useState(auth.firstName||""); const [last,setLast]=useState(auth.lastName||"");
+  const [headline,setHeadline]=useState(auth.headline||"");
+  const [country,setCountry]=useState(auth.country||""); const [city,setCity]=useState(auth.city||""); const [address,setAddress]=useState(auth.address||"");
+  const [title,setTitle]=useState(auth.title||""); const [company,setCompany]=useState(auth.company||""); const [employment,setEmployment]=useState(auth.employment||"Full-time");
+  const [focus,setFocus]=useState(auth.focus||[]);
+  const [exp,setExp]=useState(auth.exp&&auth.exp.length?auth.exp:[{r:"",c:"",p:""}]);
+  const [skills,setSkills]=useState(auth.skills&&auth.skills.length?auth.skills:[""]);
+  const [socials,setSocials]=useState(auth.socials&&auth.socials.length?auth.socials:[{network:"LinkedIn",url:""}]);
+  const [importing,setImporting]=useState(false);
+  const [liOpen,setLiOpen]=useState(false); const [liUrl,setLiUrl]=useState("");
+  const fileRef=useRef(null);
+  const toggleFocus=(c)=>setFocus(f=>f.includes(c)?f.filter(x=>x!==c):[...f,c]);
+  const addExp=()=>setExp(e=>[...e,{r:"",c:"",p:""}]);
+  const rmExp=(i)=>setExp(e=>e.filter((_,idx)=>idx!==i));
+  const setExpField=(i,k,v)=>setExp(e=>e.map((x,idx)=>idx===i?{...x,[k]:v}:x));
+  const addSkill=()=>setSkills(k=>[...k,""]);
+  const rmSkill=(i)=>setSkills(k=>k.filter((_,idx)=>idx!==i));
+  const setSkillField=(i,v)=>setSkills(k=>k.map((x,idx)=>idx===i?v:x));
+  const addSocial=()=>setSocials(s=>[...s,{network:"LinkedIn",url:""}]);
+  const rmSocial=(i)=>setSocials(s=>s.filter((_,idx)=>idx!==i));
+  const setSocialField=(i,k,v)=>setSocials(s=>s.map((x,idx)=>idx===i?{...x,[k]:v}:x));
+  const onFile=(ev)=>{const f=ev.target.files&&ev.target.files[0];if(f)setPhoto(URL.createObjectURL(f));};
+  const importLinkedIn=()=>{ setImporting(true);
+    setTimeout(()=>{
+      setHeadline(v=>v||"Machine Learning Engineer @ KInIT | Applied AI"); setCountry(v=>v||"Slovakia"); setCity(v=>v||"Bratislava");
+      setTitle(v=>v||"Machine Learning Engineer"); setCompany(v=>v||"KInIT");
+      setFocus(f=>f.length?f:["Machine Learning","Data Analysis & Processing"]);
+      setSkills(k=>k.length?k:["Python","PyTorch","MLOps","Deep Learning","Statistics"]);
+      setExp(e=>(e.length===1&&!e[0].r&&!e[0].c)?[{r:"Researcher",c:"KInIT",p:"2022 — Present"},{r:"Data Scientist",c:"ESET",p:"2019 — 2022"}]:e);
+      setSocials(s=>{const u=liUrl.trim()||"https://linkedin.com/in/jannovak";const has=s.some(x=>x.network==="LinkedIn"); return has?s.map(x=>x.network==="LinkedIn"?{...x,url:x.url||u}:x):[{network:"LinkedIn",url:u},...s];});
+      setImporting(false); setLiOpen(false);
+    },1400);
+  };
+  const save=()=>onSave({firstName:first,lastName:last,photo,headline,country,city,address,title,company,employment,focus,exp:exp.filter(e=>e.r||e.c||e.p),skills:skills.filter(s=>s.trim()),socials:socials.filter(s=>s.url)});
+  const pct=completeness({photo,title,company,focus,exp,skills,socials,city,headline});
+  const inp="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-[14px] outline-none focus:ring-2 focus:ring-brand/30 bg-white";
+  return (
+    <div className="h-full overflow-auto nice-scroll bg-slate-50">
+      <div className="max-w-[760px] mx-auto px-4 md:px-6 py-6">
+        <button onClick={()=>go("app")} className="flex items-center gap-1.5 text-[14px] text-slate-500 hover:text-ink px-2 py-1.5 rounded-lg hover:bg-slate-100 mb-3"><Icon.back size={18}/>Späť</button>
+        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="px-6 md:px-8 py-6">
+            <Stepper steps={EXPERT_STEPS} current={3} onStep={(n)=>{ if(n<=2) go("signup"); }}/>
+            <h1 className="text-2xl font-extrabold mt-5">Doplň si profil</h1>
+            <p className="text-slate-500 text-[14px] mt-1">Čím kompletnejší profil, tým lepšie ťa ostatní nájdu.</p>
+            {pct<100 && <div className="flex items-center gap-3 mt-4"><div className="flex-1 h-2 rounded-full bg-slate-100 overflow-hidden"><div className="h-full bg-brand transition-all" style={{width:pct+"%"}}/></div><span className="text-[13px] font-medium text-slate-600">{pct}%</span></div>}
+            {pct===100 && <div className="mt-4 inline-flex items-center gap-1.5 text-emerald-600 text-[13px] font-medium bg-emerald-50 px-3 py-1.5 rounded-full"><Icon.check size={14} sw={3}/>Profil je kompletný</div>}
+          </div>
+
+          <FSec title="Základné informácie">
+            {!liOpen ? (
+              <button onClick={()=>setLiOpen(true)} className="w-full flex items-center justify-center gap-2.5 py-3 rounded-xl bg-brandSoft text-brandDark font-semibold hover:brightness-95 transition">{Icon.linkedin({size:18})}Importovať údaje z LinkedIn</button>
+            ) : (
+              <div className="p-3.5 rounded-xl border border-brand/30 bg-brandSoft/10">
+                <FLabel>Vlož odkaz na svoj LinkedIn profil</FLabel>
+                <div className="flex gap-2">
+                  <input value={liUrl} onChange={e=>setLiUrl(e.target.value)} placeholder="https://linkedin.com/in/…" className={inp}/>
+                  <button onClick={importLinkedIn} disabled={!liUrl.trim()||importing} className="px-4 rounded-xl bg-brand text-white font-semibold text-[14px] disabled:opacity-40 whitespace-nowrap">{importing?"Načítavam…":"Načítať"}</button>
+                </div>
+                <p className="text-[12px] text-slate-400 mt-2">Automaticky vyplní pozíciu, zameranie, skúsenosti a zručnosti.</p>
+              </div>
+            )}
+            <div>
+              <FLabel>Profilová fotka</FLabel>
+              <div className="flex items-center gap-4">
+                <div className="w-20 h-20 rounded-full overflow-hidden bg-slate-100 flex items-center justify-center text-slate-300">{photo?<img src={photo} alt="" className="w-full h-full object-cover"/>:<Icon.users size={26}/>}</div>
+                <button onClick={()=>fileRef.current&&fileRef.current.click()} className="px-4 py-2 rounded-xl border border-slate-200 text-[14px] font-medium hover:border-slate-300">Nahrať fotku</button>
+                <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onFile}/>
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div><FLabel>Meno</FLabel><input value={first} onChange={e=>setFirst(e.target.value)} placeholder="Ján" className={inp}/></div>
+              <div><FLabel>Priezvisko</FLabel><input value={last} onChange={e=>setLast(e.target.value)} placeholder="Novák" className={inp}/></div>
+            </div>
+            <div><FLabel>Profilový nadpis</FLabel><input value={headline} onChange={e=>setHeadline(e.target.value)} placeholder="napr. ML Engineer @ KInIT | Applied AI" className={inp}/></div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div><FLabel>Krajina / región</FLabel><input value={country} onChange={e=>setCountry(e.target.value)} placeholder="Slovakia" className={inp}/></div>
+              <div><FLabel>Mesto</FLabel><input value={city} onChange={e=>setCity(e.target.value)} placeholder="Bratislava" className={inp}/></div>
+            </div>
+            <div><FLabel>Adresa</FLabel><input value={address} onChange={e=>setAddress(e.target.value)} placeholder="Ulica a číslo, PSČ" className={inp}/></div>
+          </FSec>
+
+          <FSec title="Aktuálna pozícia">
+            <div><FLabel>Pozícia</FLabel><input value={title} onChange={e=>setTitle(e.target.value)} placeholder="napr. Machine Learning Engineer" className={inp}/></div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div><FLabel>Firma</FLabel><select value={company} onChange={e=>setCompany(e.target.value)} className={inp}><option value="">Vyber firmu…</option>{ALL_COMPANIES.map(c=><option key={c} value={c}>{c}</option>)}<option value="Iné">Iné</option></select></div>
+              <div><FLabel>Typ úväzku</FLabel><select value={employment} onChange={e=>setEmployment(e.target.value)} className={inp}>{EMPLOYMENT.map(c=><option key={c} value={c}>{c}</option>)}</select></div>
+            </div>
+            <div><FLabel>Zameranie</FLabel>
+              <div className="flex flex-wrap gap-2">{CATEGORIES.map(c=>{const on=focus.includes(c);return <button key={c} onClick={()=>toggleFocus(c)} className={"inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[13px] border transition "+(on?"bg-brandSoft/50 border-brand/30 text-brandDark font-medium":"border-slate-200 text-slate-600 hover:border-slate-300")}>{catIcon(c,13)}{c}</button>;})}</div>
+            </div>
+          </FSec>
+
+          <FSec title="Skúsenosti">
+            <div className="space-y-3">{exp.map((x,i)=>(
+              <div key={i} className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-start">
+                <input value={x.r} onChange={e=>setExpField(i,"r",e.target.value)} placeholder="Pozícia" className={inp}/>
+                <input value={x.c} onChange={e=>setExpField(i,"c",e.target.value)} placeholder="Firma" className={inp}/>
+                <div className="flex gap-2"><input value={x.p} onChange={e=>setExpField(i,"p",e.target.value)} placeholder="2022 — Present" className={inp}/>{exp.length>1&&<button onClick={()=>rmExp(i)} className="w-10 flex-shrink-0 rounded-xl border border-slate-200 text-slate-400 hover:text-red-500 flex items-center justify-center"><Icon.x size={16}/></button>}</div>
+              </div>))}</div>
+            <button onClick={addExp} className="text-[14px] text-brand font-medium hover:underline flex items-center gap-1"><Icon.plus size={14}/>Pridať skúsenosť</button>
+          </FSec>
+
+          <FSec title="Zručnosti" sub="Odporúčame pridať 5 hlavných zručností.">
+            <div className="space-y-2">{skills.map((s,i)=>(
+              <div key={i} className="flex gap-2">
+                <input value={s} onChange={e=>setSkillField(i,e.target.value)} placeholder="napr. Python" className={inp}/>
+                {skills.length>1 && <button onClick={()=>rmSkill(i)} className="w-10 flex-shrink-0 rounded-xl border border-slate-200 text-slate-400 hover:text-red-500 flex items-center justify-center"><Icon.x size={16}/></button>}
+              </div>))}</div>
+            <button onClick={addSkill} className="text-[14px] text-brand font-medium hover:underline flex items-center gap-1"><Icon.plus size={14}/>Pridať zručnosť</button>
+          </FSec>
+
+          <FSec title="Kontakt a sociálne siete">
+            <div className="space-y-2">{socials.map((s,i)=>(
+              <div key={i} className="flex gap-2">
+                <select value={s.network} onChange={e=>setSocialField(i,"network",e.target.value)} className={inp+" sm:w-40 flex-shrink-0"}>{NETWORKS.map(n=><option key={n} value={n}>{n}</option>)}</select>
+                <input value={s.url} onChange={e=>setSocialField(i,"url",e.target.value)} placeholder="URL / handle" className={inp}/>
+                {socials.length>1 && <button onClick={()=>rmSocial(i)} className="w-10 flex-shrink-0 rounded-xl border border-slate-200 text-slate-400 hover:text-red-500 flex items-center justify-center"><Icon.x size={16}/></button>}
+              </div>))}</div>
+            <button onClick={addSocial} className="text-[14px] text-brand font-medium hover:underline flex items-center gap-1"><Icon.plus size={14}/>Pridať sociálnu sieť</button>
+          </FSec>
+
+          <div className="px-6 md:px-8 py-4 border-t border-slate-100 flex items-center gap-3">
+            <button onClick={onLogout} className="text-[14px] text-red-500 hover:text-red-600 px-3 py-2 font-medium">Odhlásiť sa</button>
+            <button onClick={()=>go("app")} className="ml-auto text-[14px] text-slate-500 hover:text-slate-700 px-3 py-2">Zrušiť</button>
+            <button onClick={save} className="px-8 py-2.5 rounded-xl bg-brand text-white font-semibold hover:bg-brandDark transition">Update</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+/* ============================================================ APP ROOT ============================================================ */
+function App(){
+  const [page,setPage]=useState("app");
+  const [view,setView]=useState("map");
+  const [filter,setFilter]=useState({people:true,events:true,focus:[],location:[],company:[]});
+  const [filtersOpen,setFiltersOpen]=useState(false);
+  const [detail,setDetail]=useState(null); // {mode:'map'|'page', stack:[...]}
+  const [chatOpen,setChatOpen]=useState(false);
+  const [highlighted,setHighlighted]=useState([]);
+  const [auth,setAuth]=useState(null);
+  const [welcomeDismissed,setWelcomeDismissed]=useState(false);
+  const [isMobile,setIsMobile]=useState(false);
+  const EMPTY_PROFILE={photo:null,headline:"",country:"",city:"",address:"",title:"",company:"",employment:"Full-time",focus:[],exp:[{r:"",c:"",p:""}],skills:[],socials:[{network:"LinkedIn",url:""}]};
+  const camRef=useRef(null);
+  useEffect(()=>{const m=window.matchMedia("(max-width:767px)");const on=()=>setIsMobile(m.matches);on();
+    if(m.addEventListener)m.addEventListener("change",on); else m.addListener(on);
+    return()=>{if(m.removeEventListener)m.removeEventListener("change",on); else m.removeListener(on);};},[]);
+
+  const matchPerson=(p)=>(!filter.focus.length||p.categories.some(c=>filter.focus.includes(c)))&&(!filter.location.length||filter.location.includes(p.continent))&&(!filter.company.length||filter.company.includes(p.company));
+  const matchEvent=(e)=>(!filter.focus.length||e.categories.some(c=>filter.focus.includes(c)))&&(!filter.location.length||filter.location.includes(e.continent))&&(!filter.company.length||filter.company.includes(e.company));
+  const people=useMemo(()=>filter.people?PEOPLE.filter(matchPerson):[],[filter]);
+  const events=useMemo(()=>filter.events?EVENTS.filter(matchEvent):[],[filter]);
+
+  const mapPeople=useMemo(()=>{ if(!highlighted.length)return people; const set=new Set(people.map(e=>e.id)); return [...people,...PEOPLE.filter(p=>highlighted.includes(p.id)&&!set.has(p.id))]; },[people,highlighted]);
+  const mapEvents=useMemo(()=>{ if(!highlighted.length)return events; const set=new Set(events.map(e=>e.id)); return [...events,...EVENTS.filter(e=>highlighted.includes(e.id)&&!set.has(e.id))]; },[events,highlighted]);
+
+  useEffect(()=>{if(highlighted.length&&camRef.current&&view==="map"&&page==="app"){const t=setTimeout(()=>camRef.current&&camRef.current.fit(highlighted),60);return()=>clearTimeout(t);}},[highlighted,view,page]);
+
+  const go=(p)=>{setPage(p);setDetail(null);};
+  const openMap=(e)=>setDetail({mode:"map",stack:[e]});
+  const openPage=(e)=>setDetail({mode:"page",stack:[e]});
+  const openChat=(e)=>setDetail({mode:"chat",stack:[e]});
+  const push=(e)=>setDetail(d=>({...d,stack:[...d.stack,e]}));
+  const back=()=>setDetail(d=>{const s=d.stack.slice(0,-1);return s.length?{...d,stack:s}:null;});
+  const closeDetail=()=>setDetail(null);
+  const handleSignup=(u)=>{
+    if(u.role==="member"){ setAuth({...u,...EMPTY_PROFILE,role:"member",status:"approved"}); setWelcomeDismissed(true); go("app"); }
+    else { setAuth({...u,...EMPTY_PROFILE,role:"expert",status:"incomplete"}); setWelcomeDismissed(false); go("profile-edit"); }
+  };
+  const handleLogin=()=>{ setAuth({firstName:"Ján",lastName:"Novák",email:"jan.novak@example.com",role:"expert",status:"approved",...EMPTY_PROFILE,headline:"ML Engineer @ KInIT | Applied AI",title:"Machine Learning Engineer",company:"KInIT",city:"Bratislava",country:"Slovakia",focus:["Machine Learning"],skills:["Python","PyTorch"],socials:[{network:"LinkedIn",url:"https://linkedin.com/in/jannovak"}]}); setWelcomeDismissed(true); go("app"); };
+  const handleLogout=()=>{ setAuth(null); setWelcomeDismissed(false); go("app"); };
+  const handleProfileSave=(d)=>{
+    const wasIncomplete = auth && auth.status==="incomplete";
+    setAuth(a=>({...a,...d,status: wasIncomplete?"pending":a.status}));
+    if(wasIncomplete){ go("pending"); }
+    else { setWelcomeDismissed(false); go("app"); }
+  };
+  const handleApprove=()=>setAuth(a=>a?{...a,status:"approved"}:a);
+
+  const pageDetail = detail&&detail.mode==="page";
+  const content=()=>{
+    if(page==="signup")return <SignupPage go={go} onSignup={handleSignup} toLogin={()=>go("login")}/>;
+    if(page==="login")return <LoginPage go={go} onLogin={handleLogin} toRegister={()=>go("signup")}/>;
+    if(page==="pending")return auth?<PendingPage auth={auth} go={go} onApprove={handleApprove}/>:<SignupPage go={go} onSignup={handleSignup} toLogin={()=>go("login")}/>;
+    if(page==="profile-edit")return !auth
+      ? <SignupPage go={go} onSignup={handleSignup} toLogin={()=>go("login")}/>
+      : (auth.status==="pending" ? <PendingPage auth={auth} go={go} onApprove={handleApprove}/> : <ProfileEditPage auth={auth} go={go} onLogout={handleLogout} onSave={handleProfileSave}/>);
+    if(page==="about")return <AboutPage go={go}/>;
+    if(page==="people")return pageDetail?<PageDetail stack={detail.stack} onBack={back} onOpen={push}/>:<PeopleGrid people={people} onOpen={openPage}/>;
+    if(page==="events")return pageDetail?<PageDetail stack={detail.stack} onBack={back} onOpen={push}/>:<EventsPage events={events} onOpen={openPage}/>;
+    if(pageDetail) return <PageDetail stack={detail.stack} onBack={back} onOpen={push}/>;
+    return view==="map" ? <MapView people={mapPeople} events={mapEvents} onOpen={openMap} highlighted={highlighted} camRef={camRef} isMobile={isMobile}/> : <ListView people={people} events={events} filter={filter} onOpen={openPage}/>;
+  };
+  const showFilterBar = !pageDetail && (page==="app"||page==="people"||page==="events");
+
+  return (
+    <div className="h-full flex">
+      <div className="flex-1 min-w-0 h-full flex flex-col">
+        <Header page={page} go={go} auth={auth} onRegister={()=>go("signup")} onLogin={()=>go("login")} onLogout={handleLogout} onProfile={()=>go(auth&&auth.status==="pending"?"pending":"profile-edit")}/>
+        {showFilterBar && <FilterBar filter={filter} setFilter={(upd)=>{setFilter(prev=>typeof upd==="function"?upd(prev):upd);setHighlighted([]);}} onOpenModal={()=>setFiltersOpen(true)}/>}
+        {page==="app" && highlighted.length>0 && (
+          <div className="bg-brandSoft/25 border-b border-brand/10 flex-shrink-0"><div className="px-4 md:px-6 py-2 flex items-center gap-2 text-[13px] text-brandDark"><Icon.spark size={15}/> AI zvýraznil {highlighted.length} výsledkov na mape.<button onClick={()=>setHighlighted([])} className="ml-auto underline hover:no-underline">Zrušiť</button></div></div>
+        )}
+        {page==="app" && auth && auth.status==="pending" && (
+          <div className="bg-amber-50 border-b border-amber-100 flex-shrink-0">
+            <div className="px-4 md:px-6 py-2.5 flex items-center gap-2.5 text-[13px] text-amber-700">
+              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse"/>Tvoja žiadosť čaká na schválenie.
+              <button onClick={()=>go("pending")} className="ml-auto underline hover:no-underline">Zobraziť stav</button>
+            </div>
+          </div>
+        )}
+        {page==="app" && auth && auth.role==="expert" && auth.status==="approved" && !welcomeDismissed && completeness(auth)<100 && (
+          <div className="bg-brandSoft/25 border-b border-brand/10 flex-shrink-0">
+            <div className="px-4 md:px-6 py-2.5 flex items-center gap-3 text-[13px]">
+              <AuthAvatar auth={auth} size={28}/>
+              <span className="text-slate-700 truncate">Vitaj, <b>{auth.firstName}</b>! Doplň si profil, aby ťa ostatní našli.</span>
+              <div className="hidden sm:flex items-center gap-2 ml-1"><div className="w-24 h-1.5 rounded-full bg-white overflow-hidden"><div className="h-full bg-brand" style={{width:completeness(auth)+"%"}}/></div><span className="text-slate-500">{completeness(auth)}%</span></div>
+              <button onClick={()=>go("profile-edit")} className="ml-auto flex-shrink-0 px-3 py-1.5 rounded-lg bg-brand text-white font-medium hover:bg-brandDark">Doplniť profil</button>
+              <button onClick={()=>setWelcomeDismissed(true)} className="text-slate-400 hover:text-slate-600 flex-shrink-0"><Icon.x size={16}/></button>
+            </div>
+          </div>
+        )}
+        <div className="flex-1 min-h-0 relative overflow-hidden">
+          {content()}
+          {page==="app" && !pageDetail && (
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[44]">
+              {view==="map"
+                ? <button onClick={()=>setView("list")} className="flex items-center gap-2 px-5 py-3 rounded-xl bg-navy text-white shadow-xl hover:bg-ink transition font-medium"><Icon.list size={18}/> Show List</button>
+                : <button onClick={()=>setView("map")} className="flex items-center gap-2 px-5 py-3 rounded-xl bg-navy text-white shadow-xl hover:bg-ink transition font-medium"><Icon.map size={18}/> Show Map</button>}
+            </div>
+          )}
+          {(page==="people"||page==="events") && !pageDetail && (
+            <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-[44]">
+              <button onClick={()=>{go("app");setView("map");}} className="flex items-center gap-2 px-5 py-3 rounded-xl bg-navy text-white shadow-xl hover:bg-ink transition font-medium"><Icon.map size={18}/> Show Map</button>
+            </div>
+          )}
+          {!chatOpen && <button onClick={()=>setChatOpen(true)} className="absolute bottom-6 right-6 z-[45] flex items-center justify-center gap-2 w-14 h-14 md:w-auto md:h-auto md:px-5 md:py-3.5 rounded-full bg-brandSoft text-brandDark shadow-lg hover:brightness-95 transition font-medium"><Icon.spark size={24}/><span className="hidden md:inline">Ask AI</span></button>}
+          {page==="app" && detail&&detail.mode==="map" && <Sidebar stack={detail.stack} onBack={back} onClose={closeDetail} onOpen={push}/>}
+        </div>
+      </div>
+      {chatOpen && <ChatPanel onClose={()=>setChatOpen(false)} onOpenEntity={(e)=>{ if(isMobile){openChat(e);} else {setPage("app");openMap(e);} }} onHighlight={setHighlighted} toMap={()=>{setPage("app");setView("map");setDetail(null);}}/>}
+      {detail && detail.mode==="chat" && (
+        <div className="fixed inset-0 z-[62] bg-white flex flex-col">
+          <div className="flex items-center px-3 py-3 border-b border-slate-100 flex-shrink-0">
+            <button onClick={back} className="flex items-center gap-1.5 text-[14px] font-medium text-slate-600 px-2 py-1.5 rounded-lg hover:bg-slate-100"><Icon.back size={18}/>{detail.stack.length>1?"Späť":"Späť do chatu"}</button>
+          </div>
+          <div className="flex-1 overflow-auto nice-scroll">
+            <div className="max-w-[760px] mx-auto px-3 md:px-5 py-4">
+              <div className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden"><DetailBody entity={detail.stack[detail.stack.length-1]} onOpen={push}/></div>
+              <RecommendedBox entity={detail.stack[detail.stack.length-1]} onOpen={push}/>
+            </div>
+          </div>
+        </div>
+      )}
+      {filtersOpen && <FiltersModal initial={filter} onApply={(f)=>{setFilter(f);setHighlighted([]);setFiltersOpen(false);}} onClose={()=>setFiltersOpen(false)}/>}
+    </div>
+  );
+}
+const rootEl=document.getElementById("root");
+rootEl.dataset.mounted="1";
+ReactDOM.createRoot(rootEl).render(<App/>);
+</script>
+
+<script>
+  (function () {
+    var tries = 0;
+    function boot() {
+      var ready = window.Babel && window.React && window.ReactDOM && window.d3 && window.topojson;
+      if (!ready) { if (tries++ > 200) throw new Error("Knižnice sa nenačítali z CDN (React/Babel/d3). Skontroluj internet."); setTimeout(boot, 30); return; }
+      try {
+        var src = document.getElementById("app-src").textContent;
+        var out = Babel.transform(src, { presets: [["react", { runtime: "classic" }]] }).code;
+        var s = document.createElement("script");
+        s.textContent = "(function(){\n" + out + "\n})();";
+        document.body.appendChild(s);
+      } catch (e) {
+        document.getElementById("root").innerHTML = '<div style="padding:40px;font-family:sans-serif;color:#b00">Chyba: ' + e.message + '</div>';
+        console.error(e);
+      }
+    }
+    boot();
+  })();
+</script>
+</body>
+</html>
